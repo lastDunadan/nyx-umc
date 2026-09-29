@@ -1,0 +1,76 @@
+const {
+  FEATURES,
+  HUMOR_CANDIDATE_PL,
+  HUMOR_CANDIDATE_EN,
+  SWEAR_CANDIDATE_PL,
+  SWEAR_CANDIDATE_EN,
+} = require('./config');
+const createHumorHandler = require('./humor');
+const createScoldingHandler = require('./scolding');
+const createConversationHandler = require('./conversation');
+const { hasAiAccess } = require('./access');
+
+function createMessageHandler(context) {
+  const { discord, state } = context;
+  const maybeTellJoke = createHumorHandler(context);
+  const maybeScold = createScoldingHandler(context);
+  const respond = createConversationHandler(context);
+
+  return async function onMessage(message) {
+    if (message.author.bot || !message.guild) return;
+    if (!hasAiAccess(message)) {
+      state.relationships.delete(`${message.guild.id}:${message.author.id}`);
+      for (const key of state.conversations.keys()) {
+        if (key.startsWith(`${message.guild.id}:`) && key.endsWith(`:${message.author.id}`)) {
+          state.conversations.delete(key);
+        }
+      }
+      return;
+    }
+
+    let addressedToNyx = message.mentions.has(discord.user);
+
+    if (!addressedToNyx && message.reference?.messageId) {
+      try {
+        const referenced = await message.fetchReference();
+        addressedToNyx = referenced.author.id === discord.user.id;
+      } catch {
+        // Usunięta lub niedostępna wiadomość, na którą odpowiadano.
+      }
+    }
+
+    const spontaneous = FEATURES.NAME_TRIGGER && !addressedToNyx && /\bnyx\b/i.test(message.content);
+
+    if (
+      FEATURES.SWEAR_CHECK &&
+      !addressedToNyx &&
+      !spontaneous &&
+      (
+        SWEAR_CANDIDATE_PL.test(message.content) ||
+        SWEAR_CANDIDATE_EN.test(message.content)
+      )
+    ) {
+      await maybeScold(message);
+      return;
+    }
+
+    if (
+      FEATURES.TWSS_JOKE &&
+      !addressedToNyx &&
+      !spontaneous &&
+      (
+        HUMOR_CANDIDATE_PL.test(message.content) ||
+        HUMOR_CANDIDATE_EN.test(message.content)
+      )
+    ) {
+      await maybeTellJoke(message);
+      return;
+    }
+
+    if (!addressedToNyx && !spontaneous) return;
+
+    await respond(message, spontaneous);
+  };
+}
+
+module.exports = createMessageHandler;
