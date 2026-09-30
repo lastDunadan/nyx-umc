@@ -22,7 +22,7 @@ const NEWS_REPORT = {
     leaks: '💧-przecieki',
   },
   TARGET_CHANNEL: '🧨-offtop',                // Po testach: '💬-lobby'.
-  TEST_ON_START: false,                        // true = raport od razu po każdym uruchomieniu bota.
+  TEST_ON_START: false,                       // true = raport od razu po każdym uruchomieniu bota.
   MAX_MESSAGES_PER_CHANNEL: 500,              // Po przekroczeniu limitu raport nie zostanie wysłany.
   MAX_INPUT_CHARS: 45000,
 };
@@ -35,6 +35,14 @@ const HUMOR_CANDIDATE_EN =
 const SWEAR_CANDIDATE_PL = /cholera|kurw|pierdol|jeb|chuj|(?<!\p{L})dup(?:a|y|ie|ą|ę)(?!\p{L})/iu;
 const SWEAR_CANDIDATE_EN = /fuck|shit|damn|\bass(?:hole|es)?\b/i;
 
+const POSITIVE_USER_REACTIONS = new Set([
+  '❤️', '👍', '😀', '😄', '😆', '🤣', '🥰', '😏', '💋', '🥳', '💕', '👏',
+]);
+
+const NEGATIVE_USER_REACTIONS = new Set([
+  '👎', '😒', '😠', '😡', '🤬', '🥱', '💩', '🖕',
+]);
+
 module.exports = {
   FEATURES,
   NEWS_REPORT,
@@ -43,4 +51,6 @@ module.exports = {
   HUMOR_CANDIDATE_EN,
   SWEAR_CANDIDATE_PL,
   SWEAR_CANDIDATE_EN,
+  POSITIVE_USER_REACTIONS,
+  NEGATIVE_USER_REACTIONS
 };

@@ -28,7 +28,7 @@ const OFFENDED_REPLIES = [
   'Wykryłam wiadomość. Powodu, żeby na nią odpowiedzieć, jeszcze nie.',
   'Nadal się dąsam. Zaskakujące, jak łatwo można to naprawić.',
   'Twoja wiadomość dotarła. Moja chęć rozmowy nie. 📵',
-  'Możemy wrócić do rozmowy, kiedy skończysz być przykry. To, alob poproszę LastDunadan o odebranie ci roli **🌐-AI Access**.',
+  'Możemy wrócić do rozmowy, kiedy skończysz być przykry. To, albo poproszę LastDunadan o odebranie Ci roli **🌐-AI Access**.',
   'To był moment na przeprosiny. Spróbuj jeszcze raz.',
   'Procedura jest prosta: przeprosiny, potem rozmowa. Nie każ mi rysować schematu. 😤',
   'Jeśli będziesz tak traktować załogę, LastDunadan powinien rozważyć odebranie roli **🌐-AI Access**. Ja na razie czekam na przeprosiny.',

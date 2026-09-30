@@ -191,7 +191,7 @@ function applySympathyEvent(db, {
   now = Date.now(),
 }) {
   if (!eventId || !userId || !Number.isInteger(points) ||
-    points < -3 || points > 3 || points === 0) {
+    points < -3 || points > 3) {
     throw new Error('Niepoprawne zdarzenie sympathy.');
   }
 
@@ -300,6 +300,18 @@ function acceptApology(db, userId, now = Date.now()) {
   }
 }
 
+function getRecentMessageScoreSum(db, userId) {
+  const rows = db.prepare(`
+    SELECT delta
+    FROM sympathy_events
+    WHERE user_id = ? AND event_id LIKE 'message:%'
+    ORDER BY created_at DESC, rowid DESC
+    LIMIT 3
+  `).all(userId);
+
+  return rows.reduce((sum, row) => sum + row.delta, 0);
+}
+
 module.exports = {
   MESSAGE_TTL_MS,
   openMemory,
@@ -310,4 +322,5 @@ module.exports = {
   saveRelationship,
   applySympathyEvent,
   acceptApology,
+  getRecentMessageScoreSum,
 };
