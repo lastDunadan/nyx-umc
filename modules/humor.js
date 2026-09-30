@@ -1,5 +1,9 @@
 const { SPONTANEOUS_COOLDOWN_MS } = require('./config');
 const { hasAiAccess } = require('./access');
+const {
+  TWSS_JOKE_REPLIES,
+  pickRandom
+} = require('./static-replies');
 
 function createHumorHandler({ openai, state, personality }) {
   const { lastSpontaneousReply, humorChecksInFlight } = state;
@@ -78,15 +82,7 @@ function createHumorHandler({ openai, state, personality }) {
 
       lastSpontaneousReply.set(guildId, Date.now());
 
-      const jokes = [
-        "That's what she said! 😂",
-        "That's what she said!! 🤣🤣",
-        "That's what she said!!! 🚀⭕❤️",
-        "That's what she said?! 🤭🤣",
-        "That's what she said…! 😈",
-      ];
-
-      const content = jokes[Math.floor(Math.random() * jokes.length)];
+      const content = pickRandom(TWSS_JOKE_REPLIES);
 
       await message.reply({
         content,

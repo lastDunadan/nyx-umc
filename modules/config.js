@@ -25,13 +25,6 @@ const NEWS_REPORT = {
   TEST_ON_START: false,                        // true = raport od razu po każdym uruchomieniu bota.
   MAX_MESSAGES_PER_CHANNEL: 500,              // Po przekroczeniu limitu raport nie zostanie wysłany.
   MAX_INPUT_CHARS: 45000,
-  FAREWELLS: [
-    'Ściska was, załogo UMC! Latajcie bezpiecznie! 🫡',
-    'To tyle z moich porannych podsłuchów. Uważajcie na siebie w Verse! 🫡',
-    'Trzymajcie kurs, załogo. I nie rozbijcie mi dziś żadnego statku! 🚀',
-    'Nyx kończy transmisję. Do zobaczenia między gwiazdami! ✨',
-    'Latajcie bezpiecznie. A jeśli niebezpiecznie — przynajmniej efektownie! 😏',
-  ],
 };
 
 const HUMOR_CANDIDATE_PL =

@@ -1,6 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { NEWS_REPORT } = require('./config');
+const {
+  FAREWELLS,
+  pickRandom,
+} = require('./static-replies');
 
 const DEFAULT_STATE_FILE = path.join(__dirname, '..', 'data', 'news-report.json');
 
@@ -162,9 +166,7 @@ function formatSection(items, messages) {
 }
 
 function buildReport(date, result, messages, channels, config) {
-  const farewell = config.FAREWELLS[
-    Math.floor(Math.random() * config.FAREWELLS.length)
-    ];
+  const farewell = pickRandom(FAREWELLS);
 
   const content = [
     `🗞️ **Poranny raport UMC • ${date}**`,

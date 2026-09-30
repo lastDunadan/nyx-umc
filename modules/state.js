@@ -6,4 +6,5 @@ module.exports = {
   humorChecksInFlight: new Set(),
   scoldChecksInFlight: new Set(),
   lastScoldCheck: new Map(),
+  lastOffendedReply: new Map(),
 };
