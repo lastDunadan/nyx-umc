@@ -336,6 +336,8 @@ function createConversationHandler({ discord, openai, state, personality, memory
           userId: speaker.id,
           displayName: speaker.displayName,
           points: sympathyPoints,
+          countForStreak: true,
+          isOffensive: result.isOffensive,
         });
 
         console.log(
@@ -343,6 +345,10 @@ function createConversationHandler({ discord, openai, state, personality, memory
           ` | zmiana: ${score.delta}` +
           ` | nowe zdarzenie: ${score.applied}`
         );
+
+        if (score.streakDelta > 0) {
+          console.log('[Nyx] +1 za 10 spokojnych wymian w ciągu 2 godzin.');
+        }
 
         // Przy maksymalnej reputacji doceniamy pozytywną wiadomość,
 // nawet gdy limit punktów sprawił, że delta wynosi 0.
@@ -381,6 +387,8 @@ function createConversationHandler({ discord, openai, state, personality, memory
           }
 
           await message.react(reaction).catch(console.error);
+        } else if (score.applied && score.streakDelta > 0) {
+          await message.react(POSITIVE_SCORE_REACTIONS[1]).catch(console.error);
         }
       } catch (scoreError) {
         console.error('[Nyx] Nie udało się naliczyć sympathy:', scoreError);

@@ -5,6 +5,9 @@ const { canStoreExchange } = require('./privacy');
 
 const MESSAGE_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_EXCHANGES = 10;
+const STREAK_WINDOW_MS = 2 * 60 * 60 * 1000;
+const STREAK_COOLDOWN_MS = 4 * 60 * 60 * 1000;
+const STREAK_LENGTH = 10;
 
 function openMemory() {
   const file = path.join(__dirname, '..', 'data', 'nyx-memory.sqlite');
@@ -65,6 +68,13 @@ function openMemory() {
 
   CREATE INDEX IF NOT EXISTS sympathy_events_user_date
     ON sympathy_events(user_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS conversation_streaks (
+    user_id TEXT PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+    started_at INTEGER,
+    clean_count INTEGER NOT NULL DEFAULT 0,
+    last_awarded_at INTEGER
+  );
 `);
 
   db.exec(`
@@ -204,6 +214,8 @@ function applySympathyEvent(db, {
   displayName,
   points,
   reactionEmoji = null,
+  countForStreak = false,
+  isOffensive = false,
   now = Date.now(),
 }) {
   if (!eventId || !userId || !Number.isInteger(points) ||
@@ -265,15 +277,67 @@ function applySympathyEvent(db, {
   `).run(eventId, reactionEmoji);
     }
 
+    let finalSympathy = next;
+    let streakDelta = 0;
+
+    // Zliczaj tylko zakończone rozmowy, nigdy reakcje pod wiadomościami.
+    if (countForStreak) {
+      db.prepare(`
+        INSERT OR IGNORE INTO conversation_streaks (user_id) VALUES (?)
+      `).run(userId);
+
+      const streak = db.prepare(`
+        SELECT started_at, clean_count, last_awarded_at
+        FROM conversation_streaks WHERE user_id = ?
+      `).get(userId);
+
+      let startedAt = streak.started_at;
+      let cleanCount = streak.clean_count;
+      let lastAwardedAt = streak.last_awarded_at;
+
+      if (isOffensive || next <= -10) {
+        startedAt = null;
+        cleanCount = 0;
+      } else {
+        if (startedAt === null || now - startedAt > STREAK_WINDOW_MS) {
+          startedAt = now;
+          cleanCount = 0;
+        }
+        cleanCount++;
+
+        if (cleanCount >= STREAK_LENGTH) {
+          if (lastAwardedAt === null || now - lastAwardedAt >= STREAK_COOLDOWN_MS) {
+            finalSympathy = Math.min(20, next + 1);
+            streakDelta = finalSympathy - next;
+            if (streakDelta > 0) {
+              db.prepare(`
+                INSERT INTO sympathy_events (event_id, user_id, delta, created_at)
+                VALUES (?, ?, ?, ?)
+              `).run(`streak:${eventId}`, userId, streakDelta, now);
+              lastAwardedAt = now;
+            }
+          }
+          startedAt = null;
+          cleanCount = 0;
+        }
+      }
+
+      db.prepare(`
+        UPDATE conversation_streaks
+        SET started_at = ?, clean_count = ?, last_awarded_at = ?
+        WHERE user_id = ?
+      `).run(startedAt, cleanCount, lastAwardedAt, userId);
+    }
+
     db.prepare(`
       UPDATE users
       SET sympathy = ?,
         offended = CASE WHEN ? = -20 THEN 1 ELSE 0 END
       WHERE user_id = ?
-    `).run(next, next, userId);
+    `).run(finalSympathy, finalSympathy, userId);
 
     db.exec('COMMIT');
-    return { applied: true, sympathy: next, delta };
+    return { applied: true, sympathy: finalSympathy, delta, streakDelta };
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;
