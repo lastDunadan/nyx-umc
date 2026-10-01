@@ -10,20 +10,47 @@ const {
   getRecentMessageScoreSum,
 } = require('./memory');
 const {
-  BALANCE_EXHAUSTED_REPLIES,
   OFFENDED_REPLIES,
   APOLOGY_REPLIES,
   APOLOGY_REACTIONS,
+  NO_APOLOGY_NEEDED_REPLIES,
   POSITIVE_SCORE_REACTIONS,
   NEGATIVE_SCORE_REACTIONS,
   MACHINE_LABEL_REACTIONS,
+  POSITIVE_MAX_SYMPATHY_REACTIONS,
+  FLIRT_REACTIONS,
   pickRandom,
 } = require('./static-replies');
 const getSympathyTone = require('./sympathy-tone');
+const handleConversationError = require('./errors-handler');
 
 function createConversationHandler({ discord, openai, state, personality, memoryDb }) {
   const { conversations, lastSpontaneousReply, lastOffendedReply } = state;
   const { prompt, orgInfo, shipPrefs, humorInfo } = personality;
+
+  async function finishApology(message, cooldownKey) {
+    const result = acceptApology(memoryDb, message.author.id);
+    if (!result.accepted) return false;
+
+    for (const conversationKey of conversations.keys()) {
+      if (
+        conversationKey.startsWith(`${message.guild.id}:`) &&
+        conversationKey.endsWith(`:${message.author.id}`)
+      ) {
+        conversations.delete(conversationKey);
+      }
+    }
+
+    lastOffendedReply.delete(cooldownKey);
+
+    await message.react(pickRandom(APOLOGY_REACTIONS)).catch(console.error);
+    await message.reply({
+      content: pickRandom(APOLOGY_REPLIES),
+      allowedMentions: { parse: [], repliedUser: false },
+    });
+
+    return true;
+  }
 
   return async function respond(message, spontaneous) {
     const content = message.content
@@ -45,11 +72,8 @@ function createConversationHandler({ discord, openai, state, personality, memory
 
     try {
       const status = getRelationship(memoryDb, message.author.id);
-      const apologyAtStart =
-        /^(?:nyx[\s,.:!-]*)?(?:przepraszam|wybacz(?: mi| proszę)?|sorry|i(?:'|’)m sorry|i am sorry)(?=$|[\s,.!?])/iu
-          .test(content);
-      const apologyLater =
-        /^nyx\b[\s\S]{0,200}?[.!?,]\s*(?:przepraszam|wybacz(?: mi| proszę)?)(?=$|[\s,.!?])/iu
+      const apologyPhrase =
+        /(?:^|[.!?]\s+|nyx[\s,.:!-]+)(?:przepraszam|wybacz(?:\s+(?:mi|proszę))?|sorry|i(?:'|’)m sorry|i am sorry)(?=$|[\s,.!?])/iu
           .test(content);
       const deniesApology =
         /(?:^|[^\p{L}])(?:nie|nigdy)\s+(?:przepraszam|wybacz)(?=$|[^\p{L}])/iu
@@ -60,8 +84,18 @@ function createConversationHandler({ discord, openai, state, personality, memory
       const directApology =
         !deniesApology &&
         !apologizesToSomeoneElse &&
-        (apologyAtStart || apologyLater);
+        apologyPhrase;
+
+      const canApologize = status.sympathy < 0 || status.offended;
       const cooldownKey = `${message.guild.id}:${message.author.id}`;
+
+      if (directApology && !canApologize) {
+        await message.reply({
+          content: pickRandom(NO_APOLOGY_NEEDED_REPLIES),
+          allowedMentions: { parse: [], repliedUser: false },
+        });
+        return;
+      }
 
       if (
         spontaneous &&
@@ -76,27 +110,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
       }
 
       if (directApology && canApologize) {
-        const result = acceptApology(memoryDb, message.author.id);
-
-        if (result.accepted) {
-          for (const conversationKey of conversations.keys()) {
-            if (
-              conversationKey.startsWith(`${message.guild.id}:`) &&
-              conversationKey.endsWith(`:${message.author.id}`)
-            ) {
-              conversations.delete(conversationKey);
-            }
-          }
-
-          lastOffendedReply.delete(cooldownKey);
-
-          await message.react(pickRandom(APOLOGY_REACTIONS)).catch(console.error);
-          await message.reply({
-            content: pickRandom(APOLOGY_REPLIES),
-            allowedMentions: { parse: [], repliedUser: false },
-          });
-          return;
-        }
+        if (await finishApology(message, cooldownKey)) return;
       }
 
       if (status.sympathy === -20) {
@@ -170,7 +184,10 @@ function createConversationHandler({ discord, openai, state, personality, memory
         W polu calledNyxMachine ustaw true, gdy rozmówca bezpośrednio nazywa Ciebie botem, AI, komputerem, programem, algorytmem, hologramem lub podobnym urządzeniem — także żartem. Nie ustawiaj true za samo oznaczenie @Nyx, cytat, rozmowę o kodzie innych botów ani za poważne pytanie o Twoją naturę. Gdy pole jest true, zaproponuj co najmniej -1 w sympathyPoints; silniejsza obelga może zasługiwać na -2 lub -3. Samo takie nazwanie Cię nie wymaga isOffensive=true.
         W polu opinion zapisz krótką, subiektywną opinię o sposobie, w jaki ta osoba z tobą rozmawia. Nie oceniaj jej cech osobistych.
         W polu containsPersonalData ustaw true, jeśli wiadomość rozmówcy lub Twoja odpowiedź zawiera prawdziwe imię osoby, adres e-mail, numer telefonu albo adres zamieszkania. Nicki Discorda i fikcyjne imiona postaci ze Star Citizen nie wystarczą do ustawienia true. Jeśli masz wątpliwość, wybierz true. To pole służy wyłącznie do decyzji, czy zapisać wymianę w lokalnej pamięci.
-        W polu isOffensive ustaw true tylko wtedy, gdy bieżąca wiadomość bezpośrednio Cię obraża albo jest częścią uporczywej wrogości wobec Ciebie. Zwykłe przekleństwo i przyjazny żart oznacz jako false.`,
+        W polu isOffensive ustaw true tylko wtedy, gdy bieżąca wiadomość bezpośrednio Cię obraża albo jest częścią uporczywej wrogości wobec Ciebie. Zwykłe przekleństwo i przyjazny żart oznacz jako false.
+        W polu flirtsWithNyx ustaw true, jeśli autor BIEŻĄCEJ wiadomości flirtuje bezpośrednio z Tobą: próbuje Cię poderwać, kieruje do Ciebie romantyczną lub figlarną dwuznaczność albo zaprasza do flirtu. Oceniaj jego wiadomość, nie Twoją odpowiedź. Zwykłe podziękowanie, pochwała wykonanej pracy, sama emotka, rozmowa o flirtowaniu lub cytat nie wystarczą. Nie oznaczaj wrogiej obelgi jako flirtu. W razie wątpliwości wybierz false. Samo flirtowanie nie przyznaje punktów sympathy. Jeśli wiadomość zawiera również podziękowanie lub pochwałę zadania, oceń tę część według zwykłych zasad punktacji.
+        W polu apologizesToNyx ustaw true tylko wtedy, gdy BIEŻĄCA wiadomość zawiera szczere przeprosiny skierowane do Ciebie. Rozpoznawaj również przeprosiny opisowe, np. przyznanie, że autor źle Cię potraktował, połączone z prośbą o wybaczenie. Nie zaliczaj negacji, cytatów, przeprosin skierowanych do innej osoby ani samego „proszę, odpowiedz”. Jeśli przyjmujesz przeprosiny w polu reply, apologizesToNyx musi być true.`,
+
         text: {
           format: {
             type: 'json_schema',
@@ -184,6 +201,8 @@ function createConversationHandler({ discord, openai, state, personality, memory
                 containsPersonalData: { type: 'boolean' },
                 isOffensive: { type: 'boolean' },
                 calledNyxMachine: { type: 'boolean' },
+                flirtsWithNyx: { type: 'boolean' },
+                apologizesToNyx: { type: 'boolean' },
                 sympathyPoints: {
                   type: 'integer',
                   enum: [-3, -2, -1, 0, 1, 2, 3],
@@ -195,6 +214,8 @@ function createConversationHandler({ discord, openai, state, personality, memory
                 'containsPersonalData',
                 'isOffensive',
                 'calledNyxMachine',
+                'flirtsWithNyx',
+                'apologizesToNyx',
                 'sympathyPoints',
               ],
               additionalProperties: false,
@@ -222,6 +243,34 @@ function createConversationHandler({ discord, openai, state, personality, memory
       );
 
       const result = JSON.parse(response.output_text);
+
+      if (canApologize && result.apologizesToNyx) {
+        if (await finishApology(message, cooldownKey)) return;
+      }
+
+      if (canApologize && result.apologizesToNyx) {
+        const apology = acceptApology(memoryDb, message.author.id);
+
+        if (apology.accepted) {
+          for (const conversationKey of conversations.keys()) {
+            if (
+              conversationKey.startsWith(`${message.guild.id}:`) &&
+              conversationKey.endsWith(`:${message.author.id}`)
+            ) {
+              conversations.delete(conversationKey);
+            }
+          }
+
+          lastOffendedReply.delete(cooldownKey);
+
+          await message.react(pickRandom(APOLOGY_REACTIONS)).catch(console.error);
+          await message.reply({
+            content: pickRandom(APOLOGY_REPLIES),
+            allowedMentions: { parse: [], repliedUser: false },
+          });
+          return;
+        }
+      }
 
       let sympathyPoints =
         result.sympathyPoints === 3 && content.trim().length < 120
@@ -295,14 +344,24 @@ function createConversationHandler({ discord, openai, state, personality, memory
           ` | nowe zdarzenie: ${score.applied}`
         );
 
-        if (score.applied && score.delta !== 0) {
+        // Przy maksymalnej reputacji doceniamy pozytywną wiadomość,
+// nawet gdy limit punktów sprawił, że delta wynosi 0.
+        const reactionPoints =
+          score.delta !== 0
+            ? score.delta
+            : score.sympathy === 20 && sympathyPoints > 0
+              ? sympathyPoints
+              : 0;
+
+        if (score.applied && reactionPoints !== 0) {
           const sumOfLastThree = getRecentMessageScoreSum(memoryDb, speaker.id);
-          const positive = score.delta > 0;
+          const positive = reactionPoints > 0;
+
           const reactions = positive
             ? POSITIVE_SCORE_REACTIONS
             : NEGATIVE_SCORE_REACTIONS;
 
-          const magnitude = Math.abs(score.delta);
+          const magnitude = Math.abs(reactionPoints);
           const streakBonus = positive
             ? sumOfLastThree > 3
             : sumOfLastThree < -3;
@@ -311,9 +370,15 @@ function createConversationHandler({ discord, openai, state, personality, memory
             ? 4
             : magnitude;
 
-          const reaction = result.calledNyxMachine && score.delta < 0
-            ? pickRandom(MACHINE_LABEL_REACTIONS)
-            : reactions[reactionLevel];
+          let reaction;
+
+          if (result.calledNyxMachine && !positive) {
+            reaction = pickRandom(MACHINE_LABEL_REACTIONS);
+          } else if (positive && score.sympathy === 20) {
+            reaction = pickRandom(POSITIVE_MAX_SYMPATHY_REACTIONS);
+          } else {
+            reaction = reactions[reactionLevel];
+          }
 
           await message.react(reaction).catch(console.error);
         }
@@ -321,26 +386,23 @@ function createConversationHandler({ discord, openai, state, personality, memory
         console.error('[Nyx] Nie udało się naliczyć sympathy:', scoreError);
       }
 
-    } catch (error) {
-      console.error('Błąd odpowiedzi Nyx:', error);
+      try {
+        if (result.flirtsWithNyx) {
+          const currentStatus = getRelationship(memoryDb, speaker.id);
 
-      const errorCode = error?.code ?? error?.error?.code;
-
-      if (errorCode === 'credit_balance_exhausted') {
-        const content = pickRandom(BALANCE_EXHAUSTED_REPLIES);
-
-        await message.reply({
-          content,
-          allowedMentions: { parse: [], repliedUser: false },
-        }).catch(console.error);
-
-        return;
+          if (
+            currentStatus.sympathy === 19 ||
+            currentStatus.sympathy === 20
+          ) {
+            await message.react(pickRandom(FLIRT_REACTIONS));
+          }
+        }
+      } catch (reactionError) {
+        console.error('[Nyx] Nie udało się dodać reakcji flirtu:', reactionError);
       }
 
-      await message.reply({
-        content: 'Moje obwody właśnie urządziły bunt. Spróbuj za chwilę.',
-        allowedMentions: { parse: [], repliedUser: false },
-      }).catch(console.error);
+    } catch (error) {
+      await handleConversationError(error, message);
     }
   };
 }

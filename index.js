@@ -50,9 +50,8 @@ discord.on(Events.MessageCreate, createMessageHandler({
   memoryDb,
 }));
 
-discord.on(Events.MessageReactionAdd, createUserReactionHandler({
-  discord,
-  memoryDb,
-}));
+const userReactions = createUserReactionHandler({ discord, memoryDb });
+discord.on(Events.MessageReactionAdd, userReactions.onAdd);
+discord.on(Events.MessageReactionRemove, userReactions.onRemove);
 
 discord.login(process.env.DISCORD_TOKEN).catch(console.error);

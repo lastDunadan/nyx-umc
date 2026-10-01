@@ -50,6 +50,11 @@ function openMemory() {
     db.exec('ALTER TABLE users ADD COLUMN probation_until INTEGER');
   }
 
+  if (!userColumns.has('last_apology_at')) {
+    db.exec('ALTER TABLE users ADD COLUMN last_apology_at INTEGER');
+    db.prepare('UPDATE users SET last_apology_at = ?').run(Date.now());
+  }
+
   db.exec(`
   CREATE TABLE IF NOT EXISTS sympathy_events (
     event_id TEXT PRIMARY KEY,
@@ -60,6 +65,16 @@ function openMemory() {
 
   CREATE INDEX IF NOT EXISTS sympathy_events_user_date
     ON sympathy_events(user_id, created_at);
+`);
+
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS reaction_awards (
+    event_id TEXT PRIMARY KEY
+      REFERENCES sympathy_events(event_id) ON DELETE CASCADE,
+    emoji TEXT NOT NULL,
+    reversed INTEGER NOT NULL DEFAULT 0
+      CHECK (reversed IN (0, 1))
+  );
 `);
 
   return db;
@@ -188,6 +203,7 @@ function applySympathyEvent(db, {
   userId,
   displayName,
   points,
+  reactionEmoji = null,
   now = Date.now(),
 }) {
   if (!eventId || !userId || !Number.isInteger(points) ||
@@ -242,6 +258,13 @@ function applySympathyEvent(db, {
       VALUES (?, ?, ?, ?)
     `).run(eventId, userId, delta, now);
 
+    if (reactionEmoji !== null) {
+      db.prepare(`
+    INSERT INTO reaction_awards (event_id, emoji)
+    VALUES (?, ?)
+  `).run(eventId, reactionEmoji);
+    }
+
     db.prepare(`
       UPDATE users
       SET sympathy = ?,
@@ -278,10 +301,11 @@ function acceptApology(db, userId, now = Date.now()) {
     db.prepare(`
       UPDATE users
       SET sympathy = CASE WHEN sympathy < 0 THEN 0 ELSE sympathy END,
-          offended = 0,
-          probation_until = ?
+        offended = 0,
+        probation_until = ?,
+        last_apology_at = ?
       WHERE user_id = ?
-    `).run(probationUntil, userId);
+    `).run(probationUntil, now, userId);
 
     db.prepare(`
       DELETE FROM message_bank
@@ -312,6 +336,76 @@ function getRecentMessageScoreSum(db, userId) {
   return rows.reduce((sum, row) => sum + row.delta, 0);
 }
 
+function undoReactionAward(db, { eventId, userId, emoji }) {
+  db.exec('BEGIN IMMEDIATE');
+
+  try {
+    const award = db.prepare(`
+      SELECT
+        e.delta,
+        e.created_at,
+        a.emoji,
+        a.reversed,
+        u.sympathy,
+        u.special,
+        u.last_apology_at
+      FROM sympathy_events AS e
+             JOIN reaction_awards AS a ON a.event_id = e.event_id
+             JOIN users AS u ON u.user_id = e.user_id
+      WHERE e.event_id = ? AND e.user_id = ?
+    `).get(eventId, userId);
+
+    if (!award || award.emoji !== emoji || award.reversed) {
+      db.exec('COMMIT');
+      return { undone: false };
+    }
+
+    const beforeApology =
+      award.last_apology_at !== null &&
+      award.created_at <= award.last_apology_at;
+
+    const blockedAtMinus20 =
+      award.delta < 0 && award.sympathy === -20;
+
+    let next = award.sympathy;
+
+    if (!beforeApology && !blockedAtMinus20 && award.delta !== 0) {
+      const minimum = award.special ? -9 : -20;
+
+      next = Math.max(
+        minimum,
+        Math.min(20, award.sympathy - award.delta)
+      );
+
+      db.prepare(`
+        UPDATE users
+        SET sympathy = ?,
+          offended = CASE WHEN ? = -20 THEN 1 ELSE 0 END
+        WHERE user_id = ?
+      `).run(next, next, userId);
+    }
+
+    // Zapisujemy zdjęcie także wtedy, gdy nie wolno zmienić punktów.
+    // Ponowne dodanie i zdjęcie tej reakcji nic już nie zrobi.
+    db.prepare(`
+        UPDATE reaction_awards
+        SET reversed = 1
+        WHERE event_id = ?
+    `).run(eventId);
+
+    db.exec('COMMIT');
+
+    return {
+      undone: true,
+      sympathy: next,
+      delta: next - award.sympathy,
+    };
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 module.exports = {
   MESSAGE_TTL_MS,
   openMemory,
@@ -323,4 +417,5 @@ module.exports = {
   applySympathyEvent,
   acceptApology,
   getRecentMessageScoreSum,
+  undoReactionAward,
 };

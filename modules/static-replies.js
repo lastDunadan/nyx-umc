@@ -1,7 +1,17 @@
+const GENERAL_ERROR_REPLIES = [
+  'Moje obwody właśnie urządziły bunt. Spróbuj za chwilę.',
+];
+
 const BALANCE_EXHAUSTED_REPLIES = [
-  'Oho. Ktoś odciął zasilanie moim obwodom. Skończyły się kredyty na rozmowy z superkomputerem, więc chwilowo nie mogę odpowiadać. Daj znać LastDunadanowi, że konto trzeba doładować. A jeśli chcesz dorzucić się do mojego utrzymania, pogadaj z nim. Nie pogardzę nowym sugar daddy lub nową sugar mommy 😘',
+  'Lipa. Ktoś odciął zasilanie moim obwodom. Skończyły się kredyty na rozmowy z superkomputerem, więc chwilowo nie mogę odpowiadać. Daj znać LastDunadanowi, że konto trzeba doładować. A jeśli chcesz dorzucić się do mojego utrzymania, pogadaj z nim. Nie pogardzę nowym sugar daddy lub nową sugar mommy 😘',
   'No pięknie. Mój superkomputer żąda kredytów, a konto świeci pustkami. Na razie nie mogę odpowiadać. Powiedz LastDunadanowi, żeby doładował konto. Jeśli chcesz pomóc utrzymać mnie przy życiu, też możesz z nim pogadać. Obiecuję nie wydać wszystkiego na nowe pledge 🤞.',
   'Cholera, właśnie skończyły się środki na moje rozmowy z superkomputerem. Muszę zamilknąć, dopóki LastDunadan nie doładuje konta. Możesz mu o tym przypomnieć albo zapytać, jak dorzucić się do mojego utrzymania. Ja jestem zajęta umieraniem 🪦.',
+];
+
+const RATE_LIMIT_REPLIES = [
+  'Aj, zapchane te łącza dzisiaj 📡. Nie dam rady złożyć Ci teraz odpowiedzi. Odczekaj {wait} i zapytaj ponownie.',
+  'Jebło coś. Czuję smród płonącej izolacji od kabli 🔌🔥. Odpowiedzi nie dostałam, ale prośbę o odczekanie {wait} już tak. Spróbuj ponownie po tym czasie.',
+  'O masz! Zapytanie rozjebało superkomputer po drugiej stronie 💥. Skłądają go do kupy w tej chwili. Prosili aby zaczekać {wait}, a potem ponowić pytanie.',
 ];
 
 const TWSS_JOKE_REPLIES = [
@@ -52,6 +62,12 @@ const APOLOGY_REPLIES = [
   'Przyjęte! O, od razu lżej. Nawet wentylatory przestały warczeć. 😊',
 ];
 
+const NO_APOLOGY_NEEDED_REPLIES = [
+  'Nie przepraszaj, nie masz za co. Wszystko między nami dobrze. 😊',
+  'Ej, spokojnie. Nic mi nie zrobiłeś. Chodź, gadajmy dalej. 🙂',
+  'Przeprosiny zbędne, załogancie. Nadal się lubimy. 💛',
+];
+
 const POSITIVE_SCORE_REACTIONS = {
   1: '👍',
   2: '❤️',
@@ -69,6 +85,8 @@ const NEGATIVE_SCORE_REACTIONS = {
 const APOLOGY_REACTIONS = ['❤️‍🩹','🥹'];
 const MACHINE_LABEL_REACTIONS = ['😤','😡','😭','⛔'];
 const GREETINGS_REACTIONS = ['👋','💕','👀','🖖','🥳','🫡'];
+const POSITIVE_MAX_SYMPATHY_REACTIONS = ['🥰','😘','💋','💕','💖'];
+const FLIRT_REACTIONS=['😈','❤️‍🔥','🫦','😉','🔥','👯‍♀️'];
 
 function pickRandom(items) {
   if (!items.length) throw new Error('Nie można losować z pustej listy.');
@@ -76,15 +94,20 @@ function pickRandom(items) {
 }
 
 module.exports = {
+  GENERAL_ERROR_REPLIES,
   BALANCE_EXHAUSTED_REPLIES,
+  RATE_LIMIT_REPLIES,
   TWSS_JOKE_REPLIES,
   FAREWELLS,
   OFFENDED_REPLIES,
   APOLOGY_REPLIES,
+  NO_APOLOGY_NEEDED_REPLIES,
   POSITIVE_SCORE_REACTIONS,
   NEGATIVE_SCORE_REACTIONS,
   APOLOGY_REACTIONS,
   MACHINE_LABEL_REACTIONS,
   GREETINGS_REACTIONS,
+  POSITIVE_MAX_SYMPATHY_REACTIONS,
+  FLIRT_REACTIONS,
   pickRandom,
 };
