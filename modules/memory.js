@@ -8,6 +8,7 @@ const MAX_EXCHANGES = 10;
 const STREAK_WINDOW_MS = 2 * 60 * 60 * 1000;
 const STREAK_COOLDOWN_MS = 4 * 60 * 60 * 1000;
 const STREAK_LENGTH = 10;
+const POSITIVE_REACTION_COOLDOWN_MS = 15 * 60 * 1000;
 
 function openMemory() {
   const file = path.join(__dirname, '..', 'data', 'nyx-memory.sqlite');
@@ -253,6 +254,22 @@ function applySympathyEvent(db, {
     }
 
     let change = points;
+    let reactionCooldown = false;
+
+    if (reactionEmoji !== null && change > 0) {
+      const recentAward = db.prepare(`
+        SELECT 1 FROM sympathy_events
+        WHERE user_id = ?
+          AND event_id LIKE 'reaction:%'
+          AND delta > 0
+          AND created_at > ?
+        LIMIT 1
+      `).get(userId, now - POSITIVE_REACTION_COOLDOWN_MS);
+      if (recentAward) {
+        change = 0;
+        reactionCooldown = true;
+      }
+    }
 
     // Od -10 wzwyż użytkownik może zdobywać punkty;
     // przy -10 lub mniej potrzebuje przeprosin.
@@ -337,7 +354,13 @@ function applySympathyEvent(db, {
     `).run(finalSympathy, finalSympathy, userId);
 
     db.exec('COMMIT');
-    return { applied: true, sympathy: finalSympathy, delta, streakDelta };
+    return {
+      applied: true,
+      sympathy: finalSympathy,
+      delta,
+      streakDelta,
+      reactionCooldown,
+    };
   } catch (error) {
     db.exec('ROLLBACK');
     throw error;

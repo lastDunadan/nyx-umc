@@ -47,11 +47,13 @@ function createUserReactionHandler({ discord, memoryDb }) {
           reactionEmoji: emoji,
         });
 
-        if (result.applied) {
+        if (result.applied && result.delta !== 0) {
           console.log(
             `[Nyx] Reakcja: ${result.delta > 0 ? '+' : ''}${result.delta}` +
             ` | sympathy: ${result.sympathy}`
           );
+        } else if (result.reactionCooldown) {
+          console.log('[Nyx] Dodatnia reakcja bez punktu: limit 15 minut.');
         }
       } else {
         const result = undoReactionAward(memoryDb, {
