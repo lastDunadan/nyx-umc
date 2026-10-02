@@ -265,30 +265,6 @@ function createConversationHandler({ discord, openai, state, personality, memory
         if (await finishApology(message, cooldownKey)) return;
       }
 
-      if (canApologize && result.apologizesToNyx) {
-        const apology = acceptApology(memoryDb, message.author.id);
-
-        if (apology.accepted) {
-          for (const conversationKey of conversations.keys()) {
-            if (
-              conversationKey.startsWith(`${message.guild.id}:`) &&
-              conversationKey.endsWith(`:${message.author.id}`)
-            ) {
-              conversations.delete(conversationKey);
-            }
-          }
-
-          lastOffendedReply.delete(cooldownKey);
-
-          await message.react(pickRandom(APOLOGY_REACTIONS)).catch(console.error);
-          await message.reply({
-            content: pickRandom(APOLOGY_REPLIES),
-            allowedMentions: { parse: [], repliedUser: false },
-          });
-          return;
-        }
-      }
-
       let sympathyPoints =
         result.sympathyPoints === 3 && content.trim().length < 120
           ? 2
@@ -370,7 +346,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
         }
 
         // Przy maksymalnej reputacji doceniamy pozytywną wiadomość,
-// nawet gdy limit punktów sprawił, że delta wynosi 0.
+        // nawet gdy limit punktów sprawił, że delta wynosi 0.
         const reactionPoints =
           score.delta !== 0
             ? score.delta
