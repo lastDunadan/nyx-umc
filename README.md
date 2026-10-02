@@ -31,7 +31,7 @@ Prywatny bot Discord organizacji Unholy Maiden Crew (UMC) ze świata *Star Citiz
 
    Jeśli nie używasz `nvm`, zainstaluj Node.js 24 przed wykonaniem `npm ci`. `DISCORD_TOKEN` i `OPENAI_API_KEY` są sprawdzane przy starcie; bez poprawnego `AI_ACCESS_ROLE_ID` bot nie będzie odpowiadał członkom serwera.
 
-Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dodawaj tokenów ani bazy SQLite do repozytorium. `npm test` nie uruchamia zestawu testów — w `package.json` jest obecnie skrypt zastępczy.
+Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dodawaj tokenów ani bazy SQLite do repozytorium. `npm test` uruchamia testy przez `node --test`, bez połączenia z Discordem, OpenAI ani rzeczywistą bazą.
 
 ## Jak działa
 
@@ -52,8 +52,19 @@ Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dod
 | `modules/user-reactions.js`, `modules/static-replies.js` | Ocena reakcji użytkowników oraz gotowe komunikaty, pożegnania i emoji Nyx. |
 | `modules/memory.js`, `modules/privacy.js`, `modules/state.js` | SQLite, filtr zapisu wymian i pamięć działającego procesu. |
 | `modules/news.js`, `modules/errors-handler.js` | Poranny raport i obsługa błędów rozmowy. |
-| `modules/personality.js`, `personality/*.txt` | Wczytywanie promptu, lore organizacji, preferencji statków i zasad humoru. |
+| `modules/personality.js`, `modules/personality-context.js`, `personality/*.txt` | Stały prompt i tożsamość oraz dobieranie modułów lore, statków, humoru i muzyki do tematu rozmowy. |
+| `modules/music.js`, `personality/nyx-music.txt` | Katalog utworów, wybór kandydatów, bezpośrednie linki YouTube i opis gustu Nyx. |
 | `data/` | Tworzone lokalnie pliki bazy i stanu raportu; katalog ignorowany przez Git. |
+
+## Muzyka
+
+Nyx dzieli się linkami do utworów; nie odtwarza dźwięku na kanałach głosowych. Przykłady: „Nyx, jaka jest Twoja ulubiona piosenka?”, „Poleć coś buntowniczego do walki!”, „Coś z dark country?” lub, po poleceniu utworu, „Daj coś innego”. „The Lost Boy” Grega Holdena jest jej ulubionym hymnem.
+
+Gust opisuje `personality/nyx-music.txt`. Jest ładowany do instrukcji modelu tylko przy temacie muzyki. `modules/music.js` zawiera 19 utworów i wybiera najwyżej pięciu kandydatów według tytułu, wykonawcy, tagów nastroju oraz ostatnich propozycji. Model wybiera `musicTrackId`; aplikacja dopisuje link z katalogu. Nie potrzeba nowych zależności, kluczy `.env` ani migracji bazy.
+
+Aby dodać utwór, dopisz do `MUSIC_TRACKS` obiekt z polami `id`, `title`, `artist`, `youtubeUrl`, `tags` (tablica) i `whyNyxLikes`. Nadaj unikalne, stałe ID i sprawdź link YouTube. Opcjonalna tablica `aliases` pozwala rozpoznawać inne zapisy tytułu lub wykonawcy. Istniejące tagi oraz reguły dopasowania są w `TAG_RULES`; dla nowego nastroju możesz dodać własną regułę. Po zmianie plików uruchom bota ponownie i wykonaj `npm test`.
+
+Bot pamięta w RAM pięć ostatnio udostępnionych ID w danej rozmowie użytkownika na kanale, przez maksymalnie 12 godzin bezczynności. Unika powtórek, o ile są inne pasujące utwory; bezpośrednia prośba o konkretny tytuł lub ulubiony hymn pozwala na powtórzenie. Restart czyści tę listę. Udostępniony link jest częścią odpowiedzi zapisywanej w zwykłej pamięci wymian, z dotychczasowym filtrem prywatności i limitem czasu. Sympatia nadal decyduje o tonie i odmowie pomocy.
 
 ## Pamięć i baza danych
 

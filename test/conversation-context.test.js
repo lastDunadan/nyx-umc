@@ -45,6 +45,7 @@ test('Kontynuacja, zmiana modułów, izolacja użytkowników, limit tur i TTL', 
           reply: 'Odpowiedź.', opinion: 'Neutralna.', containsPersonalData: false,
           isOffensive: false, calledNyxMachine: false, flirtsWithNyx: false,
           apologizesToNyx: false, sympathyPoints: 0,
+          musicTrackId: '',
         }),
       };
     } } },

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { selectPersonalityContext } = require('../modules/personality-context');
 
-const contextModules = ['umc', 'ships', 'humor'].map((id) => ({
+const contextModules = ['umc', 'ships', 'humor', 'music'].map((id) => ({
   id, title: id, content: `${id} module`,
 }));
 
@@ -20,9 +20,14 @@ const cases = [
   ['Co myślisz o Aurorze i Railenie?', [], ['ships']],
   ['Opowiedz żart o statkach.', [], ['humor', 'ships']],
   ['That’s what she said!', [], ['humor']],
-  ['Jaką muzykę lubisz?', ['ships'], []],
-  ['Wyjaśnij historię muzyki.', ['ships'], []],
-  ['A co jeszcze lubisz w muzyce?', ['ships'], []],
+  ['Jaką muzykę lubisz?', ['ships'], ['music']],
+  ['Wyjaśnij historię muzyki.', ['ships'], ['music']],
+  ['A co jeszcze lubisz w muzyce?', ['ships'], ['music']],
+  ['Poleć coś od Foo Fighters.', [], ['music']],
+  ['Daj coś innego.', ['music'], ['music']],
+  ['Daj coś innego.', ['ships'], []],
+  ['Poleć piosenkę do hangaru.', [], ['music', 'ships']],
+  ['Cześć, Nyx!', ['music'], []],
   ['Cześć, Nyx!', ['ships'], []],
 ];
 
