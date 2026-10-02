@@ -21,7 +21,7 @@ const NEWS_REPORT = {
     updates: '💾-aktualizacje',
     leaks: '💧-przecieki',
   },
-  TARGET_CHANNEL: '🧨-offtop',                // Po testach: '💬-lobby'.
+  TARGET_CHANNEL: '💬-lobby',                // Po testach: '💬-lobby'.
   TEST_ON_START: false,                       // true = raport od razu po każdym uruchomieniu bota.
   MAX_MESSAGES_PER_CHANNEL: 500,              // Po przekroczeniu limitu raport nie zostanie wysłany.
   MAX_INPUT_CHARS: 45000,
