@@ -1,3 +1,5 @@
+const { isMusicTopic } = require('./music');
+
 function normalize(text) {
   return String(text ?? '')
     .normalize('NFD')
@@ -53,7 +55,11 @@ function selectPersonalityContext({
     .filter(([, rules]) => rules.some((rule) => rule.test(text)))
     .map(([topic]) => topic);
 
-  const isFollowUp = FOLLOW_UP_RULES.some((rule) => rule.test(text));
+  if (isMusicTopic(text)) detectedTopics.push('music');
+
+  const musicFollowUp = previousTopics.includes('music') &&
+    /^(?:(?:a\s+)?(?:daj|polec|pokaz|podrzuc)\s+(?:mi\s+)?cos\b|(?:a\s+)?cos\s+(?:innego|mocniejszego|spokojniejszego)\b)/.test(text);
+  const isFollowUp = musicFollowUp || FOLLOW_UP_RULES.some((rule) => rule.test(text));
 
   const requestedTopics = detectedTopics.length > 0
     ? detectedTopics
