@@ -23,6 +23,8 @@ const {
 } = require('./static-replies');
 const getSympathyTone = require('./sympathy-tone');
 const handleConversationError = require('./errors-handler');
+const { createResearchedResponse } = require('./web-research');
+const turnInstructions = require('./turn-instructions');
 const { selectPersonalityContext } = require('./personality-context');
 const {
   RECENT_TRACK_LIMIT,
@@ -86,7 +88,9 @@ function createConversationHandler({ discord, openai, state, personality, memory
 
     const canContinue = Boolean(
       hasRecentConversation &&
-      previous.turns < 8 &&
+      previous.turns < 4 &&
+      previous.usedWebSearch !== true &&
+      (previous.chainInputTokens ?? 0) < 12000 &&
       previous.contextKey === selectedContext.contextKey
     );
 
@@ -197,7 +201,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
         } znaków`
       );
 
-      const response = await openai.responses.create({
+      const { response, searches, researchCalls, usage } = await createResearchedResponse(openai, {
         model: 'gpt-6-luna',
         instructions: `${basePrompt}
         ${selectedContext.instructions}
@@ -211,14 +215,8 @@ function createConversationHandler({ discord, openai, state, personality, memory
         ${sympathyTone}
         Ta instrukcja wynika z obecnej liczby punktów. Jest ważniejsza niż dawna opinia i ton wcześniejszych rozmów. Nadal przestrzegaj zasad zakresu tematów, sprawdzania faktów i prywatności.
         Poprzednia odpowiedź Nyx użyła wyszukiwania: ${previousUsedWebSearch}.
-        W polu sympathyPoints oceń WYŁĄCZNIE bieżącą wiadomość rozmówcy: liczba całkowita od -3 do 3. Domyślnie 0. Zwykłe pytanie, przyjazne przekomarzanie, przekleństwo niekierowane przeciw Tobie i rzeczowa krytyka Twojej pracy to 0. Podziękowanie za poprzednie wyszukiwanie to +1 tylko wtedy, gdy powyższa informacja o wyszukiwaniu jest true. Szczera pochwała dobrze wykonanego zadania to +2; +3 przyznaj wyłącznie za rozbudowaną, konkretną pochwałę i podziękowanie w wiadomości mającej co najmniej 120 znaków. Krótsza pochwała może dostać najwyżej +2. Lekceważący przytyk skierowany do Ciebie to -1, bezpośrednia obelga to -2, długa lub bardzo agresywna tyrada wymierzona w Ciebie to -3. Nie przyznawaj punktów za cytat, opis zachowania innej osoby ani powtarzane mechanicznie pochwały. Gdy nie masz pewności, wybierz 0.
         ${memoryContext}
-        W polu calledNyxMachine ustaw true, gdy rozmówca bezpośrednio nazywa Ciebie botem, AI, komputerem, programem, algorytmem, hologramem lub podobnym urządzeniem — także żartem. Nie ustawiaj true za samo oznaczenie @Nyx, cytat, rozmowę o kodzie innych botów ani za poważne pytanie o Twoją naturę. Gdy pole jest true, zaproponuj co najmniej -1 w sympathyPoints; silniejsza obelga może zasługiwać na -2 lub -3. Samo takie nazwanie Cię nie wymaga isOffensive=true.
-        W polu opinion zapisz krótką, subiektywną opinię o sposobie, w jaki ta osoba z tobą rozmawia. Nie oceniaj jej cech osobistych.
-        W polu containsPersonalData ustaw true, jeśli wiadomość rozmówcy lub Twoja odpowiedź zawiera prawdziwe imię osoby, adres e-mail, numer telefonu albo adres zamieszkania. Nicki Discorda i fikcyjne imiona postaci ze Star Citizen nie wystarczą do ustawienia true. Jeśli masz wątpliwość, wybierz true. To pole służy wyłącznie do decyzji, czy zapisać wymianę w lokalnej pamięci.
-        W polu isOffensive ustaw true tylko wtedy, gdy bieżąca wiadomość bezpośrednio Cię obraża albo jest częścią uporczywej wrogości wobec Ciebie. Zwykłe przekleństwo i przyjazny żart oznacz jako false.
-        W polu flirtsWithNyx ustaw true, jeśli autor BIEŻĄCEJ wiadomości flirtuje bezpośrednio z Tobą: próbuje Cię poderwać, kieruje do Ciebie romantyczną lub figlarną dwuznaczność albo zaprasza do flirtu. Oceniaj jego wiadomość, nie Twoją odpowiedź. Zwykłe podziękowanie, pochwała wykonanej pracy, sama emotka, rozmowa o flirtowaniu lub cytat nie wystarczą. Nie oznaczaj wrogiej obelgi jako flirtu. W razie wątpliwości wybierz false. Samo flirtowanie nie przyznaje punktów sympathy. Jeśli wiadomość zawiera również podziękowanie lub pochwałę zadania, oceń tę część według zwykłych zasad punktacji.
-        W polu apologizesToNyx ustaw true tylko wtedy, gdy BIEŻĄCA wiadomość zawiera szczere przeprosiny skierowane do Ciebie. Rozpoznawaj również przeprosiny opisowe, np. przyznanie, że autor źle Cię potraktował, połączone z prośbą o wybaczenie. Nie zaliczaj negacji, cytatów, przeprosin skierowanych do innej osoby ani samego „proszę, odpowiedz”. Jeśli przyjmujesz przeprosiny w polu reply, apologizesToNyx musi być true.`,
+        ${turnInstructions}`,
 
         text: {
           format: {
@@ -261,22 +259,18 @@ function createConversationHandler({ discord, openai, state, personality, memory
         },
         input: content,
         reasoning: { effort: 'medium' },
-        tools: [{ type: 'web_search', search_context_size: 'medium' }],
         tool_choice: 'auto',
         ...(canContinue
           ? { previous_response_id: previous.id }
           : {}),
       });
 
-      const searches = response.output?.filter(
-        (item) => item.type === 'web_search_call'
-      ).length ?? 0;
-
       console.log(
         `[Nyx] Odpowiedź po ${((Date.now() - startedAt) / 1000).toFixed(1)} s` +
-        ` | wejście: ${response.usage?.input_tokens ?? '?'} tokenów` +
-        ` | wyjście: ${response.usage?.output_tokens ?? '?'} tokenów` +
-        ` | wyszukiwania: ${searches}`
+        ` | wejście: ${usage.input_tokens} tokenów` +
+        ` | wyjście: ${usage.output_tokens} tokenów` +
+        ` | wyszukiwania: ${searches} | research: ${researchCalls}` +
+        ` | cache: ${usage.cached_tokens} tokenów`
       );
 
       const result = JSON.parse(response.output_text);
@@ -312,6 +306,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
         turns: canContinue ? previous.turns + 1 : 1,
         lastActivityAt: Date.now(),
         usedWebSearch: searches > 0,
+        chainInputTokens: usage.input_tokens,
         topics: selectedContext.topics,
         contextKey: selectedContext.contextKey,
         musicTrackIds: recentMusicTrackIds,
@@ -446,3 +441,4 @@ function createConversationHandler({ discord, openai, state, personality, memory
 }
 
 module.exports = createConversationHandler;
+

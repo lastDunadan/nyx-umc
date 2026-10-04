@@ -157,3 +157,34 @@ test('Rozmowa dołącza gust broni na żądanie i usuwa go po zmianie tematu', a
   assert.ok(request.instructions.includes(personality.musicInfo));
   assert.ok(!request.instructions.includes(personality.weaponPrefs));
 });
+
+
+test('Wyszukiwanie i duże wejście nie przechodzą do następnego łańcucha', async () => {
+  const calls = [];
+  const state = { conversations: new Map(), lastSpontaneousReply: new Map(), lastOffendedReply: new Map() };
+  const respond = createConversationHandler({
+    discord: { user: { id: 'nyx' } }, state, memoryDb: {},
+    personality: { basePrompt: 'CORE', contextModules: [{ id: 'ships', title: 'ships', content: 'SHIPS' }] },
+    openai: { responses: { create: async request => {
+      calls.push(request);
+      return { id: `chain-${calls.length}`, output: [], usage: { input_tokens: 100 },
+        output_text: JSON.stringify({ reply: 'Odpowiedź.', opinion: 'Neutralna.', containsPersonalData: false,
+          isOffensive: false, calledNyxMachine: false, flirtsWithNyx: false,
+          apologizesToNyx: false, sympathyPoints: 0, musicTrackId: '' }) };
+    } } },
+  });
+  const send = () => respond({ id: `message-${calls.length}`, content: 'Co lubisz w Argo?',
+    guild: { id: 'g' }, author: { id: 'u', username: 'u' },
+    channel: { id: 'c', sendTyping: async () => {}, send: async () => {} }, reply: async () => {}, react: async () => {},
+  }, false);
+  await send();
+  state.conversations.get('g:c:u').usedWebSearch = true;
+  await send();
+  assert.equal(calls[1].previous_response_id, undefined);
+  state.conversations.get('g:c:u').chainInputTokens = 12000;
+  await send();
+  assert.equal(calls[2].previous_response_id, undefined);
+  state.conversations.get('g:c:u').turns = 4;
+  await send();
+  assert.equal(calls[3].previous_response_id, undefined);
+});

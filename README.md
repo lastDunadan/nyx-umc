@@ -124,3 +124,12 @@ Skala pozostaje −20…20, nowa osoba startuje z 3; progi tonu i ochrona `speci
 
 Limity są egzekwowane transakcyjnie w SQLite i przetrwają restart. Przy starcie automatycznie dodawane są `message_fingerprints` oraz `conversation_streaks.last_counted_at`; dotychczasowe punkty nie są przeliczane. `message_fingerprints` przechowuje skrót treści po normalizacji, bez pełnej wiadomości, najwyżej 24 godziny. Skrót nie jest gwarancją anonimizacji. Usunięcie użytkownika usuwa także te rekordy. Punkty z wcześniejszych 4 godzin wliczają się do nowego budżetu.
 
+## Osobne wyszukiwanie i koszty kontekstu
+
+`modules/web-research.js` udostępnia modelowi Nyx funkcję `research_web`. Przy potrzebie aktualnych faktów model podaje samodzielne pytanie; osobne wywołanie tego samego modelu otrzymuje tylko krótkie `personality/basic-personality.txt`, pytanie i datę. Nie przekazujemy do niego biografii, gustów, nicku, punktów ani historii. Instrukcja nakazuje pomijać dane osobowe w pytaniu; nie jest to gwarancja ich automatycznego wykrycia.
+
+Wynik to krótka notatka z linkami, którą Nyx wykorzystuje w swoim zwykłym tonie. Surowe wyniki narzędzia pozostają w osobnym wywołaniu. Maksymalnie dwa zapytania badawcze na odpowiedź; niekompletny wynik trafia do obsługi błędów. Badacz używa `search_context_size: low`. Pytania o gust nie wymagają wyszukiwania.
+
+Łańcuch rozmowy resetuje się po wyszukiwaniu, zmianie modułów, 4 turach lub wejściu przekraczającym 12 000 tokenów; wtedy kontekst odbudowuje się z filtrowanej lokalnej pamięci. To usuwa kumulację wyników wyszukiwania w następnych prośbach. Historia nadal ma limit 10 wymian/12 godzin.
+
+Wyszukiwanie w API jest płatne, także treść wyników; `previous_response_id` nie zapewnia darmowej historii. Rozdzielenie dodaje wywołanie planowania i końcowej odpowiedzi, więc oszczędność dla pojedynczego krótkiego pytania nie jest gwarantowana. Log podaje zsumowane tokeny wszystkich etapów, tokeny z cache, liczbę badań oraz wywołań web_search. Oszczędności i jakość trzeba porównać na rzeczywistych pytaniach po wdrożeniu.
