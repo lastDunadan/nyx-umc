@@ -14,6 +14,11 @@ function normalize(text) {
 const PERSONAL_WEAPON_RULE = /\b(?:fps|spluw[a-z]*|karabin[a-z]*|strzelb[a-z]*|shotgun[a-z]*|pistolet[a-z]*|rewolwer[a-z]*|r97|br[-\s]?2|ravager(?:[-\s]?212)?|coda|pulverizer[a-z]*|killshot[a-z]*|ripper[a-z]*|arlington[a-z]*|clem[a-z]*|polli dalal)\b/;
 
 const TOPIC_RULES = {
+  organizations: [
+    /\b(?:lynx(?:co|corp)?|blastoff|blast off(?: solutions)?|aipoch|airborne pork chops|skrzydlat[a-z]* schabow[a-z]*|pgg|polska gromada gwiezdna|pvof|polish voices of freedom|twh|the winged hussars|skrzydlat[a-z]* husari[a-z]*)\b/,
+    /\b(?:polsk[a-z]*|znajom[a-z]*|zaprzyjaznion[a-z]*|inn[a-z]*)\s+(?:organizacj[a-z]*|org(?:i|ow|ami)?)\b/,
+    /\b(?:sojusz[a-z]*|relacj[a-z]*)\b[\s\S]{0,60}\b(?:organizacj[a-z]*|org(?:i|ow|ami)?|umc)\b/,
+  ],
   project: [
     /\b(?:cig|cloud imperium|chris(?:a|ie)? roberts[a-z]*|jared[a-z]*|huckab[a-z]*|disco lando|crowdfunding[a-z]*|development[a-z]*)\b/,
     /\b(?:finansowan[a-z]*|roadmap[a-z]*|pledge|game package|free fly)\b/,

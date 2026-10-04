@@ -19,6 +19,7 @@ const humorInfo = read('nyx-humor.txt');
 const musicInfo = read('nyx-music.txt');
 const weaponPrefs = read('nyx-weapons.txt');
 const projectInfo = read('nyx-project.txt');
+const organizationsInfo = read('nyx-organizations.txt');
 
 // Ten fragment będzie przekazywany przy każdym zapytaniu.
 const basePrompt = [
@@ -29,6 +30,7 @@ const basePrompt = [
 
 // Z tej listy wybieramy materiały pasujące do rozmowy.
 const contextModules = [
+  { id: 'organizations', title: 'Znajome organizacje UMC', content: organizationsInfo },
   {
     id: 'umc',
     title: 'Informacje o organizacji UMC',
@@ -68,4 +70,5 @@ module.exports = {
   musicInfo,
   weaponPrefs,
   projectInfo,
+  organizationsInfo,
 };
