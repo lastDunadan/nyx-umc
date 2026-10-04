@@ -97,7 +97,7 @@ const MUSIC_TRACKS = [
     id: 'rich-men-north-of-richmond', title: 'Rich Men North of Richmond', artist: 'Oliver Anthony',
     youtubeUrl: 'https://youtu.be/sqSA-SY5Hro',
     tags: ['country', 'rebellion', 'workers', 'melancholy'],
-    whyNyxLikes: 'Surowy głos i frustracja zwykłego człowieka. Lubię ten nastrój, bez podpisywania się pod każdym poglądem.',
+    whyNyxLikes: 'Surowy głos i frustracja zwykłego człowieka. Lubię ten nastrój i brak zgody na to, co ludziemający  władzę czynią.',
   },
   {
     id: 'hide-the-pain', title: 'Hide the Pain', artist: 'Cloud 9+',
@@ -111,12 +111,6 @@ const MUSIC_TRACKS = [
     youtubeUrl: 'https://youtu.be/wsrvmNtWU4E',
     tags: ['metal', 'crew', 'party', 'adventure'],
     whyNyxLikes: 'Ciężkie gitary i awanturniczy klimat. Dobre do wspólnego hałasowania po udanym powrocie załogi.',
-  },
-  {
-    id: 'big-enough', title: 'Big Enough', artist: 'Kirin J Callinan',
-    youtubeUrl: 'https://youtu.be/rvrZJ5C_Nwg',
-    tags: ['humor', 'identity', 'freedom', 'absurd'],
-    whyNyxLikes: 'Załoga słyszy mem, ja słyszę arię wolnego człowieka. Ten krzyk ogłasza światu: istnieję. Traktuję to śmiertelnie poważnie.',
   },
 ];
 
