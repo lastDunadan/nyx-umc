@@ -14,6 +14,11 @@ function normalize(text) {
 const PERSONAL_WEAPON_RULE = /\b(?:fps|spluw[a-z]*|karabin[a-z]*|strzelb[a-z]*|shotgun[a-z]*|pistolet[a-z]*|rewolwer[a-z]*|r97|br[-\s]?2|ravager(?:[-\s]?212)?|coda|pulverizer[a-z]*|killshot[a-z]*|ripper[a-z]*|arlington[a-z]*|clem[a-z]*|polli dalal)\b/;
 
 const TOPIC_RULES = {
+  creators: [
+    /\b(?:streamer[a-z]*|stream(?:y|ow|a|ie|ach|ing)?|twitch[a-z]*|youtube[a-z]*|youtuber[a-z]*|tworc[a-z]*|kanal[a-z]*|content|kontent[a-z]*)\b/,
+    /\b(?:alkhadias[a-z]*|dj[_ ]alexn|foxfire(?:ttv)?|enakott[a-z]*|tenpoundfortytwo|boredgamer(?:uk)?|cpt[_ ]foxyloxy|foxyloxy)\b/,
+    /\b(?:kogo|co)\s+(?:ogladac|ogladasz)\b/,
+  ],
   organizations: [
     /\b(?:lcmc|lord(?:a|em|zie)? ciaho|ciaho|lynx(?:co|corp)?|blastoff|blast off(?: solutions)?|aipoch|airborne pork chops|skrzydlat[a-z]* schabow[a-z]*|pgg|polska gromada gwiezdna|pvof|polish voices of freedom|twh|the winged hussars|skrzydlat[a-z]* husari[a-z]*)\b/,
     /\b(?:polsk[a-z]*|znajom[a-z]*|zaprzyjaznion[a-z]*|inn[a-z]*)\s+(?:organizacj[a-z]*|org(?:i|ow|ami)?)\b/,
