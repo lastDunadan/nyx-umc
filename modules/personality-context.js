@@ -15,7 +15,7 @@ const PERSONAL_WEAPON_RULE = /\b(?:fps|spluw[a-z]*|karabin[a-z]*|strzelb[a-z]*|s
 
 const TOPIC_RULES = {
   organizations: [
-    /\b(?:lynx(?:co|corp)?|blastoff|blast off(?: solutions)?|aipoch|airborne pork chops|skrzydlat[a-z]* schabow[a-z]*|pgg|polska gromada gwiezdna|pvof|polish voices of freedom|twh|the winged hussars|skrzydlat[a-z]* husari[a-z]*)\b/,
+    /\b(?:lcmc|lord(?:a|em|zie)? ciaho|ciaho|lynx(?:co|corp)?|blastoff|blast off(?: solutions)?|aipoch|airborne pork chops|skrzydlat[a-z]* schabow[a-z]*|pgg|polska gromada gwiezdna|pvof|polish voices of freedom|twh|the winged hussars|skrzydlat[a-z]* husari[a-z]*)\b/,
     /\b(?:polsk[a-z]*|znajom[a-z]*|zaprzyjaznion[a-z]*|inn[a-z]*)\s+(?:organizacj[a-z]*|org(?:i|ow|ami)?)\b/,
     /\b(?:sojusz[a-z]*|relacj[a-z]*)\b[\s\S]{0,60}\b(?:organizacj[a-z]*|org(?:i|ow|ami)?|umc)\b/,
   ],
