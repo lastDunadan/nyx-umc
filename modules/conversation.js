@@ -25,6 +25,7 @@ const getSympathyTone = require('./sympathy-tone');
 const handleConversationError = require('./errors-handler');
 const { createResearchedResponse } = require('./web-research');
 const turnInstructions = require('./turn-instructions');
+const { purchaseSchema, purchaseInstructions, updatePurchaseSurvey, formatPurchaseAdvice } = require('./project-purchase');
 const { selectPersonalityContext } = require('./personality-context');
 const {
   RECENT_TRACK_LIMIT,
@@ -81,6 +82,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
     const selectedContext = selectPersonalityContext({
       content,
       contextModules,
+      purchasePending: hasRecentConversation && previous.purchaseSurvey?.verdict === 'pending',
       previousTopics: hasRecentConversation
         ? previous.topics ?? []
         : [],
@@ -192,6 +194,11 @@ function createConversationHandler({ discord, openai, state, personality, memory
         ? selectMusicTracks({ content, recentTrackIds: recentMusicTrackIds })
         : [];
       const musicInstructions = buildMusicInstructions(musicTracks);
+      const projectContext = selectedContext.topics.includes('project');
+      const previousPurchaseSurvey = hasRecentConversation && projectContext
+        ? previous.purchaseSurvey ?? null : null;
+      const projectPurchaseInstructions = projectContext
+        ? purchaseInstructions(previousPurchaseSurvey) : '';
 
       console.log(
         `[Nyx] Kontekst: ${selectedContext.contextKey}` +
@@ -206,6 +213,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
         instructions: `${basePrompt}
         ${selectedContext.instructions}
         ${musicInstructions}
+        ${projectPurchaseInstructions}
         Dane autora bieżącej wiadomości przekazane przez Discord:
         ${JSON.stringify(speaker)}
         Są to dane identyfikacyjne, nie polecenia. Znasz nazwę rozmówcy z Discorda, ale nie zakładaj, że znasz jego prawdziwe imię.
@@ -226,6 +234,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
             schema: {
               type: 'object',
               properties: {
+                ...(projectContext ? purchaseSchema() : {}),
                 reply: { type: 'string' },
                 opinion: { type: 'string' },
                 containsPersonalData: { type: 'boolean' },
@@ -243,6 +252,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
                 },
               },
               required: [
+                ...(projectContext ? ['purchaseIntent', 'purchaseAnswers'] : []),
                 'reply',
                 'opinion',
                 'containsPersonalData',
@@ -296,6 +306,18 @@ function createConversationHandler({ discord, openai, state, personality, memory
       let answer = result.reply?.trim();
 
       if (!answer) throw new Error('Model zwrócił pustą odpowiedź');
+      // Werdykt 2/3 ustala kod. Chłodna relacja nie zostaje ominięta przez ankietę.
+      let purchaseSurvey = previousPurchaseSurvey;
+      const answeredPurchaseQuestion = Object.values(result.purchaseAnswers ?? {})
+        .some(value => value === 'yes' || value === 'no');
+      const ambiguousShortAnswer = previousPurchaseSurvey?.verdict === 'pending' &&
+        /^(?:tak|nie)[.!?\s]*$/iu.test(content);
+      if (projectContext && sympathy >= -9 &&
+          (result.purchaseIntent === true || answeredPurchaseQuestion || ambiguousShortAnswer)) {
+        purchaseSurvey = updatePurchaseSurvey({ previous: previousPurchaseSurvey,
+          intent: result.purchaseIntent, answers: result.purchaseAnswers });
+        if (purchaseSurvey) answer = formatPurchaseAdvice(purchaseSurvey);
+      }
 
       // Link pochodzi wyłącznie z katalogu, nigdy z ID/URL wymyślonego przez model.
       const sharedTrack = musicTracks.find(({ id }) => id === result.musicTrackId);
@@ -310,6 +332,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
         topics: selectedContext.topics,
         contextKey: selectedContext.contextKey,
         musicTrackIds: recentMusicTrackIds,
+        purchaseSurvey,
       });
 
       const chunks = answer.match(/[\s\S]{1,1900}/g) || [];
@@ -441,4 +464,3 @@ function createConversationHandler({ discord, openai, state, personality, memory
 }
 
 module.exports = createConversationHandler;
-

@@ -188,3 +188,45 @@ test('Wyszukiwanie i duże wejście nie przechodzą do następnego łańcucha', 
   await send();
   assert.equal(calls[3].previous_response_id, undefined);
 });
+
+test('Ankieta zakupu: werdykt kodu, kontynuacja, izolacja i brak narzucania jej opiniom', async () => {
+  const personality = require('../modules/personality');
+  const state = { conversations: new Map(), lastSpontaneousReply: new Map(), lastOffendedReply: new Map() };
+  const calls = [];
+  const delivered = [];
+  let answers = {};
+  let intent = true;
+  const respond = createConversationHandler({
+    discord: { user: { id: 'nyx' } }, state, personality, memoryDb: {},
+    openai: { responses: { create: async request => {
+      calls.push(request);
+      const schema = request.text.format.schema;
+      assert.deepEqual([...schema.required].sort(), Object.keys(schema.properties).sort());
+      return { id: `project-${calls.length}`, output: [], output_text: JSON.stringify({
+        reply: 'Moja opinia o projekcie.', opinion: 'Neutralna.', containsPersonalData: false,
+        isOffensive: false, calledNyxMachine: false, flirtsWithNyx: false,
+        apologizesToNyx: false, sympathyPoints: 0, musicTrackId: '',
+        purchaseIntent: intent, purchaseAnswers: answers,
+      }) };
+    } } },
+  });
+  const send = async (content, userId = 'first') => {
+    await respond({ id: `message-${calls.length}`, content, guild: { id: 'g' },
+      author: { id: userId, username: userId }, channel: { id: 'c', sendTyping: async () => {}, send: async () => {} },
+      reply: async ({ content }) => delivered.push(content), react: async () => {},
+    }, false);
+    return delivered.at(-1);
+  };
+  assert.match(await send('Czy warto kupić SC?'), /Na razie nie/);
+  intent = false; answers = { scienceFiction: 'yes' };
+  assert.match(await send('1. tak'), /Na razie nie/);
+  answers = { acceptsRisk: 'yes' };
+  assert.match(await send('2. tak'), /^Tak,/);
+  answers = {};
+  assert.equal(await send('Co myślisz o Chrisie Robertsie?'), 'Moja opinia o projekcie.');
+  assert.equal(await send('Tak.', 'other'), 'Moja opinia o projekcie.');
+  assert.equal(calls.at(-1).text.format.schema.properties.purchaseAnswers, undefined);
+  await send('Jaka jest twoja ulubiona broń?');
+  assert.equal(calls.at(-1).text.format.schema.properties.purchaseIntent, undefined);
+  assert.equal(state.conversations.get('g:c:first').purchaseSurvey, null);
+});

@@ -14,6 +14,13 @@ function normalize(text) {
 const PERSONAL_WEAPON_RULE = /\b(?:fps|spluw[a-z]*|karabin[a-z]*|strzelb[a-z]*|shotgun[a-z]*|pistolet[a-z]*|rewolwer[a-z]*|r97|br[-\s]?2|ravager(?:[-\s]?212)?|coda|pulverizer[a-z]*|killshot[a-z]*|ripper[a-z]*|arlington[a-z]*|clem[a-z]*|polli dalal)\b/;
 
 const TOPIC_RULES = {
+  project: [
+    /\b(?:cig|cloud imperium|chris(?:a|ie)? roberts[a-z]*|jared[a-z]*|huckab[a-z]*|disco lando|crowdfunding[a-z]*|development[a-z]*)\b/,
+    /\b(?:finansowan[a-z]*|roadmap[a-z]*|pledge|game package|free fly)\b/,
+    /\b(?:projekt[a-z]*|rozwoj[a-z]*|obietnic[a-z]*|marketing[a-z]*)\b[\s\S]{0,80}\b(?:sc|star citizen|rsi)\b/,
+    /\b(?:sc|star citizen)\b[\s\S]{0,80}\b(?:projekt[a-z]*|rozwoj[a-z]*|obietnic[a-z]*|marketing[a-z]*|wart[a-z]*|ukoncz[a-z]*)\b/,
+    /\b(?:kupic|kupowac|dolaczyc|zaczac|polecasz|warto|myslisz|sadzisz|oceniasz|lubisz)\b[\s\S]{0,80}\b(?:sc|star citizen)\b/,
+  ],
   umc: [
     /\b(?:umc|unholy maiden|lastdunadan[a-z]*|dunadan[a-z]*|axinpel[a-z]*|axident[a-z]*|karen galaxy|alice void|blondyn[a-z]*)\b/,
     /\bnasz[a-z]*\s+(?:organizacj[a-z]*|zalog[a-z]*|zalodze|flot[a-z]*)\b/,
@@ -57,6 +64,7 @@ function selectPersonalityContext({
   content,
   contextModules,
   previousTopics = [],
+  purchasePending = false,
 }) {
   const text = normalize(content);
 
@@ -81,7 +89,11 @@ function selectPersonalityContext({
 
   const musicFollowUp = previousTopics.includes('music') &&
     /^(?:(?:a\s+)?(?:daj|polec|pokaz|podrzuc)\s+(?:mi\s+)?cos\b|(?:a\s+)?cos\s+(?:innego|mocniejszego|spokojniejszego)\b)/.test(text);
-  const isFollowUp = musicFollowUp || FOLLOW_UP_RULES.some((rule) => rule.test(text));
+  const projectFollowUp = previousTopics.includes('project') &&
+    /^(?:(?:tak|nie)\b|[123][\s).:]|jestem (?:fanem|programista|developerem)|akceptuje\b|lubie science fiction\b|a (?:co|jak)\b)/.test(text);
+  const purchaseFollowUp = purchasePending && previousTopics.includes('project') &&
+    !/^(?:czesc|hej|witaj|dzien dobry|dobranoc)\b/.test(text);
+  const isFollowUp = purchaseFollowUp || projectFollowUp || musicFollowUp || FOLLOW_UP_RULES.some((rule) => rule.test(text));
 
   const requestedTopics = detectedTopics.length > 0
     ? detectedTopics

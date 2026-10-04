@@ -133,3 +133,20 @@ Wynik to krótka notatka z linkami, którą Nyx wykorzystuje w swoim zwykłym to
 Łańcuch rozmowy resetuje się po wyszukiwaniu, zmianie modułów, 4 turach lub wejściu przekraczającym 12 000 tokenów; wtedy kontekst odbudowuje się z filtrowanej lokalnej pamięci. To usuwa kumulację wyników wyszukiwania w następnych prośbach. Historia nadal ma limit 10 wymian/12 godzin.
 
 Wyszukiwanie w API jest płatne, także treść wyników; `previous_response_id` nie zapewnia darmowej historii. Rozdzielenie dodaje wywołanie planowania i końcowej odpowiedzi, więc oszczędność dla pojedynczego krótkiego pytania nie jest gwarantowana. Log podaje zsumowane tokeny wszystkich etapów, tokeny z cache, liczbę badań oraz wywołań web_search. Oszczędności i jakość trzeba porównać na rzeczywistych pytaniach po wdrożeniu.
+
+
+## Opinia o SC, CIG i decyzja o dołączeniu
+
+`personality/nyx-project.txt` zawiera ostrożnie optymistyczną opinię Nyx: ambicja projektu, otwarty development, finansowanie, marketing oraz własne spojrzenie na Chrisa Robertsa i Jareda Huckaby’ego (Disco Lando). Subiektywne zdanie jest oddzielone od faktów i poparte linkami do bazowych źródeł. Historyczne informacje nie określają bieżących stanowisk, finansów lub terminów: te trzeba wyszukać. Nie zapisujemy na stałe cen, kwot crowdfundingu lub dat premier.
+
+Moduł `project` dołącza się przy pasujących pytaniach i kontynuacjach. Przykłady: „Co myślisz o Star Citizen?”, „Jak oceniasz CIG?”, „Lubisz Chrisa Robertsa?”, „Czy warto kupić SC?”. Zwykłe pytanie o broń, statek lub muzykę nie dołącza go; stałe 8970 znaków osobowości pozostaje bez zmian.
+
+Dla zakupu dostępu do SC `modules/project-purchase.js` prowadzi ankietę:
+
+1. Duże zainteresowanie science fiction.
+2. Świadome wspieranie nieukończonego projektu i akceptacja ryzyka, że obietnice nie zostaną zrealizowane.
+3. Zainteresowanie programowaniem/developmentem oraz obserwowaniem projektu ze społecznością.
+
+Model rozpoznaje wyłącznie jawne odpowiedzi autora w bieżącej wiadomości; kod przechowuje je w RAM osobno dla użytkownika i kanału, z dotychczasowym limitem 12 godzin bezczynności. Co najmniej dwa „tak” dają rekomendację „warto rozważyć dołączenie”; dwa „nie” dają odmowę rekomendacji. Przy niewystarczających odpowiedziach obowiązuje „na razie nie” i pytania uzupełniające. Samo niejednoznaczne „tak” nie powinno odpowiedzieć na trzy pytania naraz; najlepiej używać numerów, np. „1 tak, 2 tak, 3 nie”. Rozpoznawanie wypowiedzi pozostaje zadaniem modelu; arytmetyka werdyktu jest deterministyczna.
+
+Pytania i werdykt renderuje kod, zamiast pozwalać modelowi ominąć próg. Niezwiązane pytanie o CIG nie wyświetla ponownie ankiety. Zmiana tematu lub restart ją czyści; same odpowiedzi nie są dodawane do SQLite jako osobny profil (zwykłe wymiany nadal podlegają dotychczasowym zasadom pamięci). Ankieta nie omija negatywnej relacji wymagającej odmowy. Rekomendacja nie jest gwarancją ukończenia lub satysfakcji; wystarczy podstawowy Game Package. Nie dodano zależności, zmiennych środowiskowych ani migracji bazy.
