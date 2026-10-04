@@ -17,6 +17,7 @@ const orgInfo = read('nyx-org.txt');
 const shipPrefs = read('nyx-ships.txt');
 const humorInfo = read('nyx-humor.txt');
 const musicInfo = read('nyx-music.txt');
+const weaponPrefs = read('nyx-weapons.txt');
 
 // Ten fragment będzie przekazywany przy każdym zapytaniu.
 const basePrompt = [
@@ -47,6 +48,11 @@ const contextModules = [
     title: 'Gust muzyczny Nyx',
     content: musicInfo,
   },
+  {
+    id: 'weapons',
+    title: 'Preferencje Nyx dotyczące broni osobistej',
+    content: weaponPrefs,
+  },
 ];
 
 module.exports = {
@@ -58,4 +64,5 @@ module.exports = {
   shipPrefs,
   humorInfo,
   musicInfo,
+  weaponPrefs,
 };

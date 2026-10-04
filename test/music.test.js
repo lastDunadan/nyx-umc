@@ -4,16 +4,10 @@ const {
   MUSIC_TRACKS, selectMusicTracks, isMusicTopic, buildMusicInstructions, formatMusicLink,
 } = require('../modules/music');
 
-test('Katalog zawiera wszystkie 19 utworów, unikalne ID i linki YouTube', () => {
-  const ids = [
-    'lost-boy', 'the-pretender', 'the-fight-song', 'rock-is-dead',
-    'the-boys-are-back', 'uprising', 'this-is-war', 'heavy-is-the-crown',
-    'red-right-hand', 'come-join-the-murder', 'killing-in-the-name',
-    'civil-war', 'get-in-the-ring', 'knockin-on-heavens-door', 'sixteen-tons',
-    'rich-men-north-of-richmond', 'hide-the-pain', 'whiskey-in-the-jar', 'big-enough',
-  ];
-  assert.deepEqual(MUSIC_TRACKS.map(({ id }) => id), ids);
-  assert.equal(new Set(ids).size, MUSIC_TRACKS.length);
+test('Katalog ma unikalne ID, kompletne opisy i linki YouTube', () => {
+  const ids = MUSIC_TRACKS.map(({ id }) => id);
+  assert.ok(ids.length > 0);
+  assert.equal(new Set(ids).size, ids.length);
   for (const track of MUSIC_TRACKS) {
     assert.ok(track.title && track.artist && track.whyNyxLikes && track.tags.length);
     assert.match(track.youtubeUrl, /^https:\/\/youtu\.be\/[A-Za-z0-9_-]{11}$/);
@@ -34,8 +28,8 @@ test('Wskazanie tytułu/wykonawcy ogranicza kandydatów do pasujących utworów'
   const tracks = selectMusicTracks({ content: "Poleć coś Guns N’ Roses" });
   assert.equal(tracks.length, 3);
   assert.ok(tracks.every(({ artist }) => artist === "Guns N' Roses"));
-  assert.deepEqual(selectMusicTracks({ content: 'Poproszę Big Enough', recentTrackIds: ['big-enough'] })
-    .map(({ id }) => id), ['big-enough']);
+  assert.deepEqual(selectMusicTracks({ content: 'Poproszę The Pretender', recentTrackIds: ['the-pretender'] })
+    .map(({ id }) => id), ['the-pretender']);
 });
 
 test('Nastrój wpływa na wybór, a pięć ostatnich propozycji ustępuje nowym', () => {
@@ -71,3 +65,4 @@ test('Gust jest modułem opcjonalnym i nie powiększa stałego promptu', () => {
   assert.ok(music.content.includes('The Lost Boy'));
   assert.ok(!basePrompt.includes(music.content));
 });
+

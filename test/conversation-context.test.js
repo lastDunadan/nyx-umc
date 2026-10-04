@@ -104,3 +104,56 @@ test('Kontynuacja, zmiana modułów, izolacja użytkowników, limit tur i TTL', 
   assert.doesNotMatch(request.instructions, /SHIPS_MODULE/);
   assert.equal(calls.length, 12);
 });
+
+test('Rozmowa dołącza gust broni na żądanie i usuwa go po zmianie tematu', async () => {
+  const personality = require('../modules/personality');
+  const calls = [];
+  const state = {
+    conversations: new Map(), lastSpontaneousReply: new Map(), lastOffendedReply: new Map(),
+  };
+  const respond = createConversationHandler({
+    discord: { user: { id: 'nyx' } }, state, personality, memoryDb: {},
+    openai: { responses: { create: async (request) => {
+      calls.push(request);
+      return {
+        id: `weapons-response-${calls.length}`, output: [],
+        output_text: JSON.stringify({
+          reply: 'Odpowiedź.', opinion: 'Neutralna.', containsPersonalData: false,
+          isOffensive: false, calledNyxMachine: false, flirtsWithNyx: false,
+          apologizesToNyx: false, sympathyPoints: 0, musicTrackId: '',
+        }),
+      };
+    } } },
+  });
+  async function send(content) {
+    await respond({
+      id: `weapons-message-${calls.length}`, content, guild: { id: 'guild' },
+      author: { id: 'first', username: 'first' },
+      channel: { id: 'channel', sendTyping: async () => {}, send: async () => {} },
+      reply: async () => {}, react: async () => {},
+    }, false);
+    return calls.at(-1);
+  }
+
+  let request = await send('Nyx, jaka jest Twoja ulubiona broń?');
+  assert.ok(request.instructions.includes(personality.weaponPrefs));
+  assert.ok(!request.instructions.includes(personality.shipPrefs));
+  assert.equal(request.previous_response_id, undefined);
+  assert.deepEqual(request.text.format.schema.properties.musicTrackId.enum, ['']);
+
+  request = await send('Tylko tyle?');
+  assert.equal(request.previous_response_id, 'weapons-response-1');
+  assert.ok(request.instructions.includes(personality.weaponPrefs));
+  request = await send('Poleć loadout.');
+  assert.equal(request.previous_response_id, 'weapons-response-2');
+
+  request = await send('Jaką broń dobrać do Arrowa?');
+  assert.equal(request.previous_response_id, undefined);
+  assert.ok(!request.instructions.includes(personality.weaponPrefs));
+  assert.ok(request.instructions.includes(personality.shipPrefs));
+
+  request = await send('Jaką muzykę lubisz?');
+  assert.equal(request.previous_response_id, undefined);
+  assert.ok(request.instructions.includes(personality.musicInfo));
+  assert.ok(!request.instructions.includes(personality.weaponPrefs));
+});

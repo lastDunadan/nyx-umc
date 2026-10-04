@@ -10,6 +10,9 @@ function normalize(text) {
     .trim();
 }
 
+// Wyraźne odniesienia do broni osobistej odróżniamy od uzbrojenia statków.
+const PERSONAL_WEAPON_RULE = /\b(?:fps|spluw[a-z]*|karabin[a-z]*|strzelb[a-z]*|shotgun[a-z]*|pistolet[a-z]*|rewolwer[a-z]*|r97|br[-\s]?2|ravager(?:[-\s]?212)?|coda|pulverizer[a-z]*|killshot[a-z]*|ripper[a-z]*|arlington[a-z]*|clem[a-z]*|polli dalal)\b/;
+
 const TOPIC_RULES = {
   umc: [
     /\b(?:umc|unholy maiden|lastdunadan[a-z]*|dunadan[a-z]*|axinpel[a-z]*|axident[a-z]*|karen galaxy|alice void|blondyn[a-z]*)\b/,
@@ -21,7 +24,13 @@ const TOPIC_RULES = {
     /\b(?:argo|aegis|anvil|aopoa|banu|crusader|drake|esperia|gatac|greycat|kruger|mirai|misc|origin|rsi|tumbril)\b/,
     /\b(?:consolidated outland|grey's market)\b/,
     /\b(?:auror[a-z]*|avenger[a-z]*|titan[a-z]*|cutter[a-z]*|cutlass[a-z]*|nomad[a-z]*|pisces|mustang[a-z]*|arrow[a-z]*|hornet[a-z]*|carrack[a-z]*|reclaimer[a-z]*|hammerhead[a-z]*|idris[a-z]*|polaris[a-z]*|perseus[a-z]*|perseusz[a-z]*|ironclad[a-z]*|kraken[a-z]*|mpuv[a-z]*|guardian[a-z]*|freelancer[a-z]*|reliant[a-z]*|odyssey|merchantman[a-z]*|railen[a-z]*|prowler[a-z]*|wolf[a-z]*)\b/,
-    /\b(?:build|loadout|naped[a-z]*|ladown[a-z]*|wiezycz[a-z]*|wieza|wieze)\b/,
+    /\b(?:starfarer[a-z]*|naped[a-z]*|ladown[a-z]*|wiezycz[a-z]*|wieza|wieze)\b/,
+  ],
+
+  weapons: [
+    PERSONAL_WEAPON_RULE,
+    /\b(?:bron(?:i|ia)?|behring[a-z]*|gemini|kastak[a-z]*|hedeb[a-z]*|bunk(?:ier|r)[a-z]*)\b/,
+    /\b(?:kastak arms|klaus\s*(?:&|i|and)\s*werner|grey['’]s market)\b/,
   ],
 
   humor: [
@@ -51,9 +60,22 @@ function selectPersonalityContext({
 }) {
   const text = normalize(content);
 
-  const detectedTopics = Object.entries(TOPIC_RULES)
+  let detectedTopics = Object.entries(TOPIC_RULES)
     .filter(([, rules]) => rules.some((rule) => rule.test(text)))
     .map(([topic]) => topic);
+
+  // „Broń do Arrowa” i „Starfarer Gemini” nie wymagają gustu broni ręcznej.
+  // Konkretne modele FPS w rozmowie o statkach mogą dołączyć oba moduły.
+  if (detectedTopics.includes('ships') && !PERSONAL_WEAPON_RULE.test(text)) {
+    detectedTopics = detectedTopics.filter((topic) => topic !== 'weapons');
+  }
+
+  if (/\b(?:build|loadout)[a-z]*\b/.test(text) &&
+      !detectedTopics.some((topic) => topic === 'ships' || topic === 'weapons')) {
+    const topic = previousTopics.includes('weapons') && !previousTopics.includes('ships')
+      ? 'weapons' : 'ships';
+    detectedTopics.push(topic);
+  }
 
   if (isMusicTopic(text)) detectedTopics.push('music');
 

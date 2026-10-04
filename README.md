@@ -52,15 +52,23 @@ Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dod
 | `modules/user-reactions.js`, `modules/static-replies.js` | Ocena reakcji użytkowników oraz gotowe komunikaty, pożegnania i emoji Nyx. |
 | `modules/memory.js`, `modules/privacy.js`, `modules/state.js` | SQLite, filtr zapisu wymian i pamięć działającego procesu. |
 | `modules/news.js`, `modules/errors-handler.js` | Poranny raport i obsługa błędów rozmowy. |
-| `modules/personality.js`, `modules/personality-context.js`, `personality/*.txt` | Stały prompt i tożsamość oraz dobieranie modułów lore, statków, humoru i muzyki do tematu rozmowy. |
+| `modules/personality.js`, `modules/personality-context.js`, `personality/*.txt` | Stały prompt i tożsamość oraz dobieranie modułów lore, statków, broni osobistej, humoru i muzyki do tematu rozmowy. |
 | `modules/music.js`, `personality/nyx-music.txt` | Katalog utworów, wybór kandydatów, bezpośrednie linki YouTube i opis gustu Nyx. |
 | `data/` | Tworzone lokalnie pliki bazy i stanu raportu; katalog ignorowany przez Git. |
+
+## Gust broni a porady o sprzęcie
+
+`personality/nyx-weapons.txt` opisuje proponowany gust Nyx: shotgun Gemini R97 jako ulubioną broń, historię Clema, romantyczną słabość do Arlingtona i zazdrość o wspólny gust z Karen Galaxy. Pozostałe preferencje dotyczą BR-2, Ravagera-212, Cody, Pulverizera, Killshota i Rippera. Są to upodobania postaci, nie ranking aktualnej mety.
+
+Moduł `weapons` trafia do instrukcji modelu dopiero po rozpoznaniu broni osobistej, producenta, modelu lub kontekstu FPS/bunkrów. Krótkie kontynuacje zachowują temat w danej rozmowie. Dobór uzbrojenia do Arrowa i pytanie o Starfarera Gemini korzystają z modułu statków; wiadomość łącząca statek z konkretną bronią osobistą może dołączyć oba moduły. Reguły wyboru są w `modules/personality-context.js`.
+
+W stałym `nyx-prompt.txt` jest tylko wspólna zasada oddzielania gustu od praktycznych porad. Rekomendacje mają uwzględniać aktualną wersję, potrzeby gracza, parametry, wiarygodne testy i doświadczenia społeczności, z zaznaczeniem niepewności. Nyx może odradzić własną ulubioną broń lub polecić sprzęt, którego wyglądu nie lubi. Edycja plików osobowości wymaga restartu aplikacji; moduł nie dodaje zależności ani zmian `.env` lub SQLite.
 
 ## Muzyka
 
 Nyx dzieli się linkami do utworów; nie odtwarza dźwięku na kanałach głosowych. Przykłady: „Nyx, jaka jest Twoja ulubiona piosenka?”, „Poleć coś buntowniczego do walki!”, „Coś z dark country?” lub, po poleceniu utworu, „Daj coś innego”. „The Lost Boy” Grega Holdena jest jej ulubionym hymnem.
 
-Gust opisuje `personality/nyx-music.txt`. Jest ładowany do instrukcji modelu tylko przy temacie muzyki. `modules/music.js` zawiera 19 utworów i wybiera najwyżej pięciu kandydatów według tytułu, wykonawcy, tagów nastroju oraz ostatnich propozycji. Model wybiera `musicTrackId`; aplikacja dopisuje link z katalogu. Nie potrzeba nowych zależności, kluczy `.env` ani migracji bazy.
+Gust opisuje `personality/nyx-music.txt`. Jest ładowany do instrukcji modelu tylko przy temacie muzyki. `modules/music.js` zawiera edytowalny katalog utworów i wybiera najwyżej pięciu kandydatów według tytułu, wykonawcy, tagów nastroju oraz ostatnich propozycji. Model wybiera `musicTrackId`; aplikacja dopisuje link z katalogu. Nie potrzeba nowych zależności, kluczy `.env` ani migracji bazy.
 
 Aby dodać utwór, dopisz do `MUSIC_TRACKS` obiekt z polami `id`, `title`, `artist`, `youtubeUrl`, `tags` (tablica) i `whyNyxLikes`. Nadaj unikalne, stałe ID i sprawdź link YouTube. Opcjonalna tablica `aliases` pozwala rozpoznawać inne zapisy tytułu lub wykonawcy. Istniejące tagi oraz reguły dopasowania są w `TAG_RULES`; dla nowego nastroju możesz dodać własną regułę. Po zmianie plików uruchom bota ponownie i wykonaj `npm test`.
 
