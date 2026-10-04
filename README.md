@@ -31,7 +31,7 @@ Prywatny bot Discord organizacji Unholy Maiden Crew (UMC) ze świata *Star Citiz
 
    Jeśli nie używasz `nvm`, zainstaluj Node.js 24 przed wykonaniem `npm ci`. `DISCORD_TOKEN` i `OPENAI_API_KEY` są sprawdzane przy starcie; bez poprawnego `AI_ACCESS_ROLE_ID` bot nie będzie odpowiadał członkom serwera.
 
-Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dodawaj tokenów ani bazy SQLite do repozytorium. `npm test` uruchamia testy przez `node --test`, bez połączenia z Discordem, OpenAI ani rzeczywistą bazą.
+Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dodawaj tokenów ani bazy SQLite do repozytorium. `npm test` uruchamia testy przez `node --test`, bez połączenia z Discordem lub OpenAI; testy pamięci używają izolowanej SQLite, nie bazy bota.
 
 ## Jak działa
 
@@ -110,3 +110,17 @@ Projekt jest obecnie napisany dla **jednego serwera** i ma zaszytą postać Nyx 
 5. Przy wdrożeniu na więcej niż jednym serwerze przejrzyj klucze pamięci i logikę dostępu: trwałe relacje są indeksowane według ID użytkownika, a domyślna konfiguracja zakłada jeden serwer. Samo wpisanie `GUILD_ID` w raporcie nie izoluje relacji między serwerami.
 
 Identyfikator modelu (`gpt-6-luna`) jest zapisany osobno w modułach używających OpenAI. Jeśli chcesz zmienić model, sprawdź `conversation.js`, `humor.js`, `scolding.js` i `news.js` oraz przetestuj format odpowiedzi każdego z nich.
+
+
+## Limity wzrostu sympatii
+
+Skala pozostaje −20…20, nowa osoba startuje z 3; progi tonu i ochrona `special` pozostają takie jak wcześniej. Nowe reguły w `modules/memory.js`:
+
+- Wszystkie dodatnie nagrody łącznie: najwyżej +3 w ruchomym oknie 4 godzin (wiadomości, reakcje i bonus rozmowy). Częściowa nagroda jest możliwa, np. +1 zamiast +2 przy jednym wolnym punkcie.
+- Pochwała/podziękowanie: nie częściej niż raz na 15 minut na użytkownika, również między kanałami. Powtórzona treść po normalizacji wielkości liter, akcentów i interpunkcji nie daje punktów przez 24 godziny. Nie jest to semantyczny detektor parafraz; tempo i budżet ograniczają również zmienione pochwały.
+- Dodatni lajk: nadal najwyżej jeden punkt na 15 minut. Pierwsza punktowana/rozpatrzona reakcja na daną wiadomość zostaje zapamiętana; ponowne dodanie nie zarabia. Cofnięcie punktu nie zwalnia wykorzystanego budżetu ani cooldownu.
+- Bonus za 10 spokojnych wymian w 2 godziny: najwyżej raz na 4 godziny, w ramach wspólnego budżetu. Do ciągu zaliczane są różne treści mające co najmniej 12 liter/cyfr, najwyżej jedna na minutę; obelga resetuje ciąg. Powtarzanie „dziękuję” nie nabija bonusu.
+- Ujemne punkty nadal bez dodatnich ograniczeń; probation podwaja kary, a `special` chroni minimum −9. Przeprosiny nie zerują dodatnich punktów i nie obchodzą limitów nagród.
+
+Limity są egzekwowane transakcyjnie w SQLite i przetrwają restart. Przy starcie automatycznie dodawane są `message_fingerprints` oraz `conversation_streaks.last_counted_at`; dotychczasowe punkty nie są przeliczane. `message_fingerprints` przechowuje skrót treści po normalizacji, bez pełnej wiadomości, najwyżej 24 godziny. Skrót nie jest gwarancją anonimizacji. Usunięcie użytkownika usuwa także te rekordy. Punkty z wcześniejszych 4 godzin wliczają się do nowego budżetu.
+

@@ -363,6 +363,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
           userId: speaker.id,
           displayName: speaker.displayName,
           points: sympathyPoints,
+          messageContent: content,
           countForStreak: true,
           isOffensive: result.isOffensive,
         });
@@ -370,7 +371,9 @@ function createConversationHandler({ discord, openai, state, personality, memory
         console.log(
           `[Nyx] Sympathy: ${score.sympathy}` +
           ` | zmiana: ${score.delta}` +
-          ` | nowe zdarzenie: ${score.applied}`
+          ` | nowe zdarzenie: ${score.applied}` +
+          ` | ograniczenie dodatnich: ${Boolean(score.positiveSuppressed)}` +
+          ` | powtórka: ${Boolean(score.repeatedMessage)}`
         );
 
         if (score.streakDelta > 0) {
@@ -382,7 +385,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
         const reactionPoints =
           score.delta !== 0
             ? score.delta
-            : score.sympathy === 20 && sympathyPoints > 0
+            : score.sympathy === 20 && sympathyPoints > 0 && !score.positiveSuppressed
               ? sympathyPoints
               : 0;
 
