@@ -29,7 +29,7 @@ test('Kontynuacja, zmiana modułów, izolacja użytkowników, limit tur i TTL', 
     conversations: new Map(), lastSpontaneousReply: new Map(), lastOffendedReply: new Map(),
   };
   const respond = createConversationHandler({
-    discord: { user: { id: 'nyx' } }, state, memoryDb: {},
+    discord: { user: { id: 'nyx' } }, state, memoryDb: {}, stickerSender: async () => false,
     personality: {
       basePrompt: 'CORE_IDENTITY',
       contextModules: ['umc', 'ships', 'humor'].map((id) => ({
@@ -112,7 +112,7 @@ test('Rozmowa dołącza gust broni na żądanie i usuwa go po zmianie tematu', a
     conversations: new Map(), lastSpontaneousReply: new Map(), lastOffendedReply: new Map(),
   };
   const respond = createConversationHandler({
-    discord: { user: { id: 'nyx' } }, state, personality, memoryDb: {},
+    discord: { user: { id: 'nyx' } }, state, personality, memoryDb: {}, stickerSender: async () => false,
     openai: { responses: { create: async (request) => {
       calls.push(request);
       return {
@@ -163,7 +163,7 @@ test('Wyszukiwanie i duże wejście nie przechodzą do następnego łańcucha', 
   const calls = [];
   const state = { conversations: new Map(), lastSpontaneousReply: new Map(), lastOffendedReply: new Map() };
   const respond = createConversationHandler({
-    discord: { user: { id: 'nyx' } }, state, memoryDb: {},
+    discord: { user: { id: 'nyx' } }, state, memoryDb: {}, stickerSender: async () => false,
     personality: { basePrompt: 'CORE', contextModules: [{ id: 'ships', title: 'ships', content: 'SHIPS' }] },
     openai: { responses: { create: async request => {
       calls.push(request);
@@ -197,7 +197,7 @@ test('Ankieta zakupu: werdykt kodu, kontynuacja, izolacja i brak narzucania jej 
   let answers = {};
   let intent = true;
   const respond = createConversationHandler({
-    discord: { user: { id: 'nyx' } }, state, personality, memoryDb: {},
+    discord: { user: { id: 'nyx' } }, state, personality, memoryDb: {}, stickerSender: async () => false,
     openai: { responses: { create: async request => {
       calls.push(request);
       const schema = request.text.format.schema;

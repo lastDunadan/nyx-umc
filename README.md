@@ -185,3 +185,27 @@ Centralny adapter OpenAI zapisuje metryki każdego otrzymanego wyniku Responses:
 Cennik jest jawnie zapisany w `modules/fuel.js`: dla `gpt-6-luna` standardowe stawki odczytane 2026-10-04 to 0.10 USD wejście, 0.01 USD cache i 0.50 USD wyjście na milion tokenów oraz 0.01 USD za wywołanie `web_search`. Źródło: https://developers.openai.com/api/docs/pricing. Sprawdzaj te wartości przy zmianie modelu, trybu lub cennika. Konteksty powyżej konserwatywnego limitu 128000 tokenów, inne modele/tryby i brak usage nie są zgadywane: wynik `/fuel` informuje wtedy o niepełnych danych zamiast pokazywać pozorne saldo. Snapshot kosztu jest zapisywany przy wywołaniu; zmiana stawek nie przelicza historycznych kosztów. Po korekcie stawek ustaw ponownie saldo z panelu.
 
 Prognoza używa średniego kosztu maksymalnie 100 ostatnich zakończonych wymian z API (minimum 5 próbek). Kilka etapów research liczy się jako jedna wymiana; raporty obciążają saldo, ale nie zwiększają liczby próbek rozmowy. Koszt w tle nie jest prognozowany na przyszłość. SDK/retry, inne aplikacje korzystające z konta, podatki, wygaśnięcie kredytów, zmiany stawek i doładowania mogą powodować różnice: panel OpenAI pozostaje źródłem rzeczywistego salda.
+
+### Obrazki reakcji Nyx
+
+Pliki `images/sticker-*-512.png` są wysyłane jako załączniki PNG w odpowiedziach,
+nie wymagają instalowania stickerów na serwerze. Bot potrzebuje uprawnienia
+**Attach Files**. Katalog i mechanika znajdują się w `modules/stickers.js`.
+
+- Maksymalnie **2 obrazki dziennie dla całej aplikacji**, według daty w `Europe/Warsaw`.
+  Tabela `sticker_deliveries` w SQLite zachowuje wykorzystany limit po restarcie.
+- Każdy rodzaj ma 24h przerwy w pamięci procesu; restart zeruje tę przerwę,
+  lecz nie limit dzienny. Najwyżej jeden obrazek na obsługiwaną wiadomość.
+- Zwykłe okazje mają 25% szansy. Przejścia do 20 (`wink`) i −20 (`angry`)
+  pomijają losowanie, ale nadal respektują oba limity i wcześniejszy obrazek w tej turze.
+- `focus`: reputacja ≥12, przed faktycznym researchem. `thumbup`: reputacja ≥15,
+  konkretna pochwała/podziękowanie ≥120 znaków, z dodatnią oceną bez blokady antyspamowej.
+  `salute`: reputacja ≥15, szacunek za pomoc załodze lub osiągnięcie.
+  `disbelief`: facepalm przy reputacji ≥−9. `sulk`: przy reputacji ≤−5 może
+  zastąpić odmowę tekstową; przy −20 nadal obowiązuje dwuminutowy cooldown odpowiedzi.
+- Model klasyfikuje sytuację w `stickerSituation`, a kod egzekwuje progi i limity.
+  Obrazki nie przyznają punktów. Brak pliku lub odmowa wysyłki nie przerywa rozmowy
+  i nie zużywa limitu. Nie uruchamiają się dla użytkowników bez AI Access.
+
+`war` i `bored` są na razie tylko zasobami. Automatyczne zagajenia,
+screenshoty i tryb nocny pozostają wyłączone.

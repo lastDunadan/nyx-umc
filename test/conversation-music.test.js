@@ -34,7 +34,7 @@ test('Muzyka: zatwierdzone linki, pamięć, izolacja, zmiana tematu i odmowa', a
   };
   let mode = 'recommend';
   const respond = createConversationHandler({
-    discord: { user: { id: 'nyx' } }, state, memoryDb: {}, personality,
+    discord: { user: { id: 'nyx' } }, state, memoryDb: {}, stickerSender: async () => false, personality,
     openai: { responses: { create: async (request) => {
       calls.push(request);
       const schema = request.text.format.schema;

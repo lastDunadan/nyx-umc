@@ -14,7 +14,7 @@ const RESEARCH_TOOL = {
 };
 
 // Surowe wyniki wyszukiwania pozostają w osobnym wywołaniu bez historii i lore.
-async function createResearchedResponse(openai, request) {
+async function createResearchedResponse(openai, request, { beforeResearch } = {}) {
   let response;
   let searches = 0;
   let researchCalls = 0;
@@ -40,6 +40,7 @@ async function createResearchedResponse(openai, request) {
       if (typeof query !== 'string' || !query.trim() || query.length > 1000) {
         throw new Error('Niepoprawne pytanie do research_web.');
       }
+      if (researchCalls === 0 && beforeResearch) await beforeResearch();
       researchCalls++;
       const facts = await openai.responses.create({
         model: request.model, instructions: basicPrompt,

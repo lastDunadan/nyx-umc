@@ -1,3 +1,4 @@
+const { createStickerSender, selectSticker } = require('./stickers');
 const { memoryVersion } = require('./memory-control');
 const { SPONTANEOUS_COOLDOWN_MS } = require('./config');
 const {
@@ -35,9 +36,10 @@ const {
   formatMusicLink,
 } = require('./music');
 
-function createConversationHandler({ discord, openai, state, personality, memoryDb }) {
+function createConversationHandler({ discord, openai, state, personality, memoryDb, stickerSender }) {
   const { conversations, lastSpontaneousReply, lastOffendedReply } = state;
   const { basePrompt, contextModules } = personality;
+  const sendSticker = stickerSender ?? createStickerSender(memoryDb);
 
   async function finishApology(message, cooldownKey) {
     const result = acceptApology(memoryDb, message.author.id);
@@ -69,6 +71,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
       .trim();
 
     if (!content) return;
+    const stickerTurn = { sent: false };
 
     const key = `${message.guild.id}:${message.channel.id}:${message.author.id}`;
     const version = memoryVersion(state, message.author.id);
@@ -150,6 +153,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
 
         lastOffendedReply.set(cooldownKey, now);
 
+        if (await sendSticker(message, 'sulk', { turn: stickerTurn })) return;
         await message.reply({
           content: pickRandom(OFFENDED_REPLIES),
           allowedMentions: { parse: [], repliedUser: false },
@@ -238,6 +242,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
               type: 'object',
               properties: {
                 ...(projectContext ? purchaseSchema() : {}),
+                stickerSituation: { type: 'string', enum: ['none', 'thumbup', 'salute', 'disbelief', 'sulk'] },
                 reply: { type: 'string' },
                 opinion: { type: 'string' },
                 containsPersonalData: { type: 'boolean' },
@@ -256,6 +261,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
               },
               required: [
                 ...(projectContext ? ['purchaseIntent', 'purchaseAnswers'] : []),
+                'stickerSituation',
                 'reply',
                 'opinion',
                 'containsPersonalData',
@@ -276,7 +282,11 @@ function createConversationHandler({ discord, openai, state, personality, memory
         ...(canContinue
           ? { previous_response_id: previous.id }
           : {}),
-      });
+      }, { beforeResearch: async () => {
+        if (sympathy >= 12 && memoryUnchanged()) {
+          await sendSticker(message, 'focus', { content: 'Daj mi chwilę. Sprawdzam.', turn: stickerTurn });
+        }
+      } });
 
       console.log(
         `[Nyx] Odpowiedź po ${((Date.now() - startedAt) / 1000).toFixed(1)} s` +
@@ -339,7 +349,10 @@ function createConversationHandler({ discord, openai, state, personality, memory
         purchaseSurvey,
       });
 
-      const chunks = answer.match(/[\s\S]{1,1900}/g) || [];
+      const sulkSent = result.stickerSituation === 'sulk' && sympathy <= -5
+        ? await sendSticker(message, 'sulk', { turn: stickerTurn }) : false;
+      if (sulkSent) answer = '[Nyx odmawia pomocy i okazuje urazę stickerem.]';
+      const chunks = sulkSent ? [] : answer.match(/[\s\S]{1,1900}/g) || [];
       for (let i = 0; i < chunks.length; i++) {
         const options = {
           content: chunks[i],
@@ -403,6 +416,15 @@ function createConversationHandler({ discord, openai, state, personality, memory
           console.log('[Nyx] +1 za 10 spokojnych wymian w ciągu 2 godzin.');
         }
 
+        const sticker = selectSticker({ before: sympathy, after: score.sympathy,
+          applied: score.applied, points: sympathyPoints, suppressed: score.positiveSuppressed,
+          content, situation: result.stickerSituation });
+        const stickerSent = score.applied && sticker && await sendSticker(message, sticker, {
+          turn: stickerTurn, guaranteed: sticker === 'wink' || sticker === 'angry',
+          content: sticker === 'wink' ? 'Dobry z ciebie załogant. 😉'
+            : sticker === 'angry' ? 'Przegiąłeś. Możesz się odwalić. Czekam na przeprosiny.' : undefined,
+        });
+
         // Przy maksymalnej reputacji doceniamy pozytywną wiadomość,
         // nawet gdy limit punktów sprawił, że delta wynosi 0.
         const reactionPoints =
@@ -412,7 +434,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
               ? sympathyPoints
               : 0;
 
-        if (score.applied && reactionPoints !== 0) {
+        if (!stickerSent && !stickerTurn.sent && score.applied && reactionPoints !== 0) {
           const sumOfLastThree = getRecentMessageScoreSum(memoryDb, speaker.id);
           const positive = reactionPoints > 0;
 
@@ -440,7 +462,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
           }
 
           await message.react(reaction).catch(console.error);
-        } else if (score.applied && score.streakDelta > 0) {
+        } else if (!stickerTurn.sent && score.applied && score.streakDelta > 0) {
           await message.react(POSITIVE_SCORE_REACTIONS[1]).catch(console.error);
         }
       } catch (scoreError) {
