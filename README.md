@@ -150,3 +150,38 @@ Dla zakupu dostępu do SC `modules/project-purchase.js` prowadzi ankietę:
 Model rozpoznaje wyłącznie jawne odpowiedzi autora w bieżącej wiadomości; kod przechowuje je w RAM osobno dla użytkownika i kanału, z dotychczasowym limitem 12 godzin bezczynności. Co najmniej dwa „tak” dają rekomendację „warto rozważyć dołączenie”; dwa „nie” dają odmowę rekomendacji. Przy niewystarczających odpowiedziach obowiązuje „na razie nie” i pytania uzupełniające. Samo niejednoznaczne „tak” nie powinno odpowiedzieć na trzy pytania naraz; najlepiej używać numerów, np. „1 tak, 2 tak, 3 nie”. Rozpoznawanie wypowiedzi pozostaje zadaniem modelu; arytmetyka werdyktu jest deterministyczna.
 
 Pytania i werdykt renderuje kod, zamiast pozwalać modelowi ominąć próg. Niezwiązane pytanie o CIG nie wyświetla ponownie ankiety. Zmiana tematu lub restart ją czyści; same odpowiedzi nie są dodawane do SQLite jako osobny profil (zwykłe wymiany nadal podlegają dotychczasowym zasadom pamięci). Ankieta nie omija negatywnej relacji wymagającej odmowy. Rekomendacja nie jest gwarancją ukończenia lub satysfakcji; wystarczy podstawowy Game Package. Nie dodano zależności, zmiennych środowiskowych ani migracji bazy.
+
+### Prywatne komendy `/nyx`
+
+Komenda jest rejestrowana na serwerze po uruchomieniu Nyx. Przy jednym serwerze ID jest wykrywane automatycznie; przy kilku ustaw `NEWS_REPORT.GUILD_ID`. Aktualizowana jest wyłącznie komenda `/nyx`, bez usuwania pozostałych komend aplikacji. Instalacja bota musi mieć zakres `applications.commands`, a użytkownik uprawnienie korzystania z komend aplikacji i rolę wskazaną przez `AI_ACCESS_ROLE_ID`. Widoczność komendy dla ról można dodatkowo ustawić w integracjach serwera Discord.
+
+Wszystkie odpowiedzi są ephemeral: widzi je tylko wywołująca osoba. Komendy nie korzystają z modelu i nie naliczają reputacji.
+
+| Komenda | Działanie |
+| --- | --- |
+| `/nyx help` | Opis, lista komend, instrukcja wywoływania i kanał `🌐-ai`. |
+| `/nyx rep` | Reputacja, nazwa poziomu i zapisana opinia z SQLite. |
+| `/nyx purge` | Usunięcie wszystkich lokalnych wymian użytkownika po potwierdzeniu przyciskiem (ważnym 60 sekund). |
+| `/nyx clean liczba:3` | Usunięcie 1–10 ostatnich lokalnych wymian. Jedna wymiana to tekst użytkownika i odpowiedź Nyx. |
+| `/nyx privacy` | Opis zapisywanych danych, filtrów i retencji, bez ujawniania treści rozmów. |
+| `/nyx fuel` | Szacowane saldo USD i zapas odpowiedzi. |
+
+Purge/clean zachowują opinię, reputację, flagi i zabezpieczenia przed nabijaniem punktów. Przerywają wszystkie lokalne łańcuchy rozmów tej osoby, również ankietę zakupową i kontekst muzyki. Zapytanie API trwające podczas usuwania nie odtworzy lokalnej pamięci. Wysłanej już wiadomości nie cofamy. Komendy nie kasują wiadomości na Discordzie ani zapisów po stronie OpenAI; o usunięcie pozostałych danych lokalnych należy poprosić administrację.
+
+### Paliwo: saldo startowe i szacowanie kosztów
+
+Po zmianach uruchomiona aplikacja automatycznie tworzy w istniejącej bazie tabele `fuel_checkpoint`, `fuel_usage` i `fuel_groups`. Nie dodawaj klucza administracyjnego OpenAI. Saldo nie jest odczytywane z panelu rozliczeń.
+
+Aby ustawić saldo, zatrzymaj Nyx, sprawdź aktualne kredyty w panelu OpenAI i z katalogu projektu wykonaj:
+
+```sh
+node scripts/set-fuel.js 10.50
+```
+
+Następnie uruchom Nyx ponownie. Podajesz **pełne bieżące saldo**, nie kwotę ostatniego doładowania. Nowy punkt odniesienia pomija wcześniej zapisane koszty, aby ich nie odejmować drugi raz. Nie aktualizuj salda w trakcie trwających zapytań API. W DB Browser można podejrzeć `fuel_checkpoint`; do korekty używaj skryptu, który atomowo ustawia saldo, datę i granicę wcześniejszych zdarzeń.
+
+Centralny adapter OpenAI zapisuje metryki każdego otrzymanego wyniku Responses: model, tokeny wejścia/wyjścia/cache, wywołania `web_search` i szacowany koszt. Obejmuje wieloetapowy research, rozmowy, żarty, strofowanie i raporty, również wyniki otrzymane przed późniejszym błędem aplikacji. Nie zapisuje treści promptów ani odpowiedzi w tabelach paliwa. Błąd API bez zwróconego usage nie daje pełnych danych billingowych.
+
+Cennik jest jawnie zapisany w `modules/fuel.js`: dla `gpt-6-luna` standardowe stawki odczytane 2026-10-04 to 0.10 USD wejście, 0.01 USD cache i 0.50 USD wyjście na milion tokenów oraz 0.01 USD za wywołanie `web_search`. Źródło: https://developers.openai.com/api/docs/pricing. Sprawdzaj te wartości przy zmianie modelu, trybu lub cennika. Konteksty powyżej konserwatywnego limitu 128000 tokenów, inne modele/tryby i brak usage nie są zgadywane: wynik `/fuel` informuje wtedy o niepełnych danych zamiast pokazywać pozorne saldo. Snapshot kosztu jest zapisywany przy wywołaniu; zmiana stawek nie przelicza historycznych kosztów. Po korekcie stawek ustaw ponownie saldo z panelu.
+
+Prognoza używa średniego kosztu maksymalnie 100 ostatnich zakończonych wymian z API (minimum 5 próbek). Kilka etapów research liczy się jako jedna wymiana; raporty obciążają saldo, ale nie zwiększają liczby próbek rozmowy. Koszt w tle nie jest prognozowany na przyszłość. SDK/retry, inne aplikacje korzystające z konta, podatki, wygaśnięcie kredytów, zmiany stawek i doładowania mogą powodować różnice: panel OpenAI pozostaje źródłem rzeczywistego salda.

@@ -1,3 +1,4 @@
+const { memoryVersion } = require('./memory-control');
 const { SPONTANEOUS_COOLDOWN_MS } = require('./config');
 const {
   MESSAGE_TTL_MS,
@@ -70,6 +71,8 @@ function createConversationHandler({ discord, openai, state, personality, memory
     if (!content) return;
 
     const key = `${message.guild.id}:${message.channel.id}:${message.author.id}`;
+    const version = memoryVersion(state, message.author.id);
+    const memoryUnchanged = () => version === memoryVersion(state, message.author.id);
     const previous = conversations.get(key);
     const startedAt = Date.now();
 
@@ -323,6 +326,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
       const sharedTrack = musicTracks.find(({ id }) => id === result.musicTrackId);
       if (sharedTrack) answer += `\n\n${formatMusicLink(sharedTrack)}`;
 
+      if (!memoryUnchanged()) return;
       conversations.set(key, {
         id: response.id,
         turns: canContinue ? previous.turns + 1 : 1,
@@ -346,6 +350,7 @@ function createConversationHandler({ discord, openai, state, personality, memory
         else await message.channel.send(options);
       }
 
+      if (!memoryUnchanged()) return;
       if (sharedTrack) {
         conversations.get(key).musicTrackIds = [
           ...recentMusicTrackIds.filter((id) => id !== sharedTrack.id),
