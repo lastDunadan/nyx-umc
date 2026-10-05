@@ -67,12 +67,12 @@ test('Muzyka: zatwierdzone linki, pamięć, izolacja, zmiana tematu i odmowa', a
   const favorite = MUSIC_TRACKS.find(({ id }) => id === 'lost-boy');
   assert.equal(request.text.format.schema.properties.musicTrackId.enum[1], favorite.id);
   assert.ok(delivered.at(-1).includes(favorite.youtubeUrl));
-  assert.equal(saved.at(-1).response, delivered.at(-1));
+  assert.equal(saved.length, 0); // Rozmowa nie zapisuje już starej pamięci między kanałami.
   assert.ok(!request.instructions.includes(favorite.youtubeUrl));
   assert.deepEqual(state.conversations.get('guild:channel:first').musicTrackIds, ['lost-boy']);
 
   request = await send('Daj coś innego.');
-  assert.equal(request.previous_response_id, 'response-1');
+  assert.equal(request.previous_response_id, undefined);
   assert.ok(!request.text.format.schema.properties.musicTrackId.enum.includes('lost-boy'));
 
   request = await send('Daj coś innego.', 'second');
@@ -101,3 +101,4 @@ test('Muzyka: zatwierdzone linki, pamięć, izolacja, zmiana tematu i odmowa', a
   assert.equal(calls.length, callCount);
   assert.ok(!delivered.at(-1).includes('youtu.be'));
 });
+

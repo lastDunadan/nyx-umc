@@ -1,3 +1,11 @@
+// Można zastąpić nazwy kanałów ich ID; wątki nie są automatycznie dozwolone.
+const CHAT_MEMORY = {
+  CHANNELS: ['💬-lobby', '🌍-lobby-int', '🍻-kantyna', '🧨-offtop'],
+  MAX_MESSAGES: 20,
+  MAX_MESSAGE_CHARS: 3000,
+  MAX_CONTEXT_CHARS: 12000,
+};
+
 const TIMER_VALUE = {
   TEST: 20 * 1000,
   LIVE: 5 * 60 * 1000,
@@ -44,6 +52,7 @@ const NEGATIVE_USER_REACTIONS = new Set([
 ]);
 
 module.exports = {
+  CHAT_MEMORY,
   FEATURES,
   NEWS_REPORT,
   SPONTANEOUS_COOLDOWN_MS,

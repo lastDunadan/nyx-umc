@@ -1,3 +1,4 @@
+const { initChannelMemory, deleteExpiredChannelMessages } = require('./channel-memory');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
@@ -121,10 +122,12 @@ function openMemory({ file = path.join(__dirname, '..', 'data', 'nyx-memory.sqli
     );
     CREATE INDEX IF NOT EXISTS message_fingerprints_date ON message_fingerprints(created_at);
   `);
+  initChannelMemory(db);
   return db;
 }
 
 function deleteExpired(db, now = Date.now()) {
+  deleteExpiredChannelMessages(db, now);
   db.prepare('DELETE FROM message_bank WHERE created_at <= ?')
     .run(now - MESSAGE_TTL_MS);
   db.prepare('DELETE FROM message_fingerprints WHERE created_at <= ?').run(now - REPEAT_WINDOW_MS);
@@ -472,6 +475,7 @@ function acceptApology(db, userId, now = Date.now()) {
       DELETE FROM message_bank
       WHERE user_id = ? AND is_offensive = 1
     `).run(userId);
+    db.prepare(`DELETE FROM channel_messages WHERE user_id = ? AND is_offensive = 1`).run(userId);
 
     db.exec('COMMIT');
     return {
@@ -580,4 +584,5 @@ module.exports = {
   getRecentMessageScoreSum,
   undoReactionAward,
 };
+
 

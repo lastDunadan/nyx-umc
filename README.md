@@ -50,6 +50,8 @@ Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dod
 | `modules/conversation.js`, `modules/sympathy-tone.js` | Odpowiedzi modelu, kontekst pamięci, ton relacji, punktacja i przeprosiny. |
 | `modules/humor.js`, `modules/scolding.js` | Spontaniczny żart i żartobliwe strofowanie. |
 | `modules/user-reactions.js`, `modules/static-replies.js` | Ocena reakcji użytkowników oraz gotowe komunikaty, pożegnania i emoji Nyx. |
+| `modules/channel-memory.js`, `modules/channel-observer.js` | Kontekst kanału, zapis wiadomości i odpowiedzi, identyfikacja autora oraz kontrola ról. |
+| `modules/memory-control.js`, `modules/commands.js` | Usuwanie pamięci w bieżącym kanale i prywatne komendy. |
 | `modules/memory.js`, `modules/privacy.js`, `modules/state.js` | SQLite, filtr zapisu wymian i pamięć działającego procesu. |
 | `modules/news.js`, `modules/errors-handler.js` | Poranny raport i obsługa błędów rozmowy. |
 | `modules/personality.js`, `modules/personality-context.js`, `personality/*.txt` | Stały prompt i tożsamość oraz dobieranie modułów lore, statków, broni osobistej, humoru i muzyki do tematu rozmowy. |
@@ -76,9 +78,9 @@ Bot pamięta w RAM pięć ostatnio udostępnionych ID w danej rozmowie użytkown
 
 ## Pamięć i baza danych
 
-`modules/memory.js` tworzy `data/nyx-memory.sqlite` przy starcie. Główne tabele to `users` (ID Discord, nick, opinia, poziom `sympathy`, flaga `special` i stan relacji), `message_bank` (ostatnie wymiany), `sympathy_events` (zdarzenia punktowe) oraz `reaction_awards` (emoji i informacja o cofnięciu punktów). Flaga `special` jest ustawiana ręcznie w bazie; bot sam jej nie przyznaje.
+`modules/memory.js` tworzy `data/nyx-memory.sqlite` przy starcie. Główne tabele to `users` (ID Discord, nick, opinia, poziom `sympathy`, flaga `special` i stan relacji), `channel_messages` (bieżąca historia kanałów), `message_bank` (stary bank, nieużywany przez rozmowę), `sympathy_events` (zdarzenia punktowe) oraz `reaction_awards` (emoji i informacja o cofnięciu punktów). Flaga `special` jest ustawiana ręcznie w bazie; bot sam jej nie przyznaje.
 
-Na użytkownika przechowywanych jest najwyżej **10 wymian**. Wymiany starsze niż **12 godzin** są usuwane przy starcie, przy odczycie pamięci i cyklicznie co 5 minut. Zapis treści może zostać pominięty przez filtr danych osobowych (`modules/privacy.js`) i ocenę modelu. Filtr ogranicza ryzyko zapisu takich danych, ale nie gwarantuje ich wykrycia w każdej postaci. Rekordy `users` i historia zdarzeń punktowych **nie mają automatycznego terminu usunięcia**. Nick Discorda jest zapisywany w `users`; należy to opisać w regulaminie i zapewnić drogę do żądania usunięcia danych.
+Na kanał przechowywanych jest najwyżej **20 wiadomości łącznie** (użytkownicy i powiązane odpowiedzi Nyx), dodatkowo maksymalnie **12 000 znaków serializowanego kontekstu** i **3000 znaków na pojedynczą wiadomość**. Zbyt długie wiadomości nie są zapisywane. Wymiany starsze niż **12 godzin** są usuwane przy starcie, przy odczycie pamięci i cyklicznie co 5 minut. Zapis treści może zostać pominięty przez lokalny filtr danych osobowych i deklaracji typu „mam na imię” (`modules/privacy.js`) i ocenę modelu. Filtr ogranicza ryzyko zapisu takich danych, ale nie gwarantuje ich wykrycia w każdej postaci. Rekordy `users` i historia zdarzeń punktowych **nie mają automatycznego terminu usunięcia**. Nick Discorda jest zapisywany w `users`; należy to opisać w regulaminie i zapewnić drogę do żądania usunięcia danych.
 
 Przed ręczną edycją SQLite zatrzymaj bota i zachowaj kopię bazy. W DB Browser for SQLite można obejrzeć dane oraz usunąć dane konkretnego użytkownika po jego ID Discord; klucz obcy usuwa wtedy również powiązane wymiany i zdarzenia:
 
@@ -105,7 +107,7 @@ Projekt jest obecnie napisany dla **jednego serwera** i ma zaszytą postać Nyx 
 
 1. Przeredaguj `personality/nyx-prompt.txt`, `nyx-org.txt`, `nyx-ships.txt` i `nyx-humor.txt`. Zmień nazwę społeczności, zakres rozmów, historię postaci, żarty, preferencje i źródła wiedzy. Jeśli zmieniasz nazwy plików, popraw je również w `modules/personality.js`.
 2. Przejrzyj teksty zależne od UMC i LastDunadan w `modules/static-replies.js`, instrukcje w `modules/conversation.js` i `modules/scolding.js` oraz nagłówek i instrukcję raportu w `modules/news.js`. Samo podmienienie plików `.txt` nie wystarczy.
-3. Ustaw własne kanały, strefę czasową i godzinę w `NEWS_REPORT` oraz listy słów i emoji w `modules/config.js`. Jeśli nie potrzebujesz raportu lub spontanicznych reakcji, wyłącz odpowiednie pozycje `FEATURES`.
+3. Ustaw własne kanały, strefę czasową i godzinę w `NEWS_REPORT` oraz listy słów i emoji oraz `CHAT_MEMORY.CHANNELS` w `modules/config.js`. Jeśli nie potrzebujesz raportu lub spontanicznych reakcji, wyłącz odpowiednie pozycje `FEATURES`.
 4. Utwórz własną rolę dostępu na nowym serwerze i wpisz jej ID w `AI_ACCESS_ROLE_ID`. Dostosuj regulamin i zasady zapisu danych do swojej społeczności.
 5. Przy wdrożeniu na więcej niż jednym serwerze przejrzyj klucze pamięci i logikę dostępu: trwałe relacje są indeksowane według ID użytkownika, a domyślna konfiguracja zakłada jeden serwer. Samo wpisanie `GUILD_ID` w raporcie nie izoluje relacji między serwerami.
 
@@ -130,7 +132,7 @@ Limity są egzekwowane transakcyjnie w SQLite i przetrwają restart. Przy starci
 
 Wynik to krótka notatka z linkami, którą Nyx wykorzystuje w swoim zwykłym tonie. Surowe wyniki narzędzia pozostają w osobnym wywołaniu. Maksymalnie dwa zapytania badawcze na odpowiedź; niekompletny wynik trafia do obsługi błędów. Badacz używa `search_context_size: low`. Pytania o gust nie wymagają wyszukiwania.
 
-Łańcuch rozmowy resetuje się po wyszukiwaniu, zmianie modułów, 4 turach lub wejściu przekraczającym 12 000 tokenów; wtedy kontekst odbudowuje się z filtrowanej lokalnej pamięci. To usuwa kumulację wyników wyszukiwania w następnych prośbach. Historia nadal ma limit 10 wymian/12 godzin.
+Każda rozmowa zaczyna nowe żądanie API z jawną historią bieżącego kanału (20 wiadomości/12 000 znaków/12 godzin), bez previous_response_id z poprzedniej tury. Łańcuch API może wystąpić wyłącznie wewnątrz jednej odpowiedzi, między planowaniem a wynikiem researchu. Dzięki temu kontekst innych kanałów ani ukryta historia API nie wracają po usunięciu wiadomości.
 
 Wyszukiwanie w API jest płatne, także treść wyników; `previous_response_id` nie zapewnia darmowej historii. Rozdzielenie dodaje wywołanie planowania i końcowej odpowiedzi, więc oszczędność dla pojedynczego krótkiego pytania nie jest gwarantowana. Log podaje zsumowane tokeny wszystkich etapów, tokeny z cache, liczbę badań oraz wywołań web_search. Oszczędności i jakość trzeba porównać na rzeczywistych pytaniach po wdrożeniu.
 
@@ -161,12 +163,12 @@ Wszystkie odpowiedzi są ephemeral: widzi je tylko wywołująca osoba. Komendy n
 | --- | --- |
 | `/nyx help` | Opis, lista komend, instrukcja wywoływania i kanał `🌐-ai`. |
 | `/nyx rep` | Reputacja, nazwa poziomu i zapisana opinia z SQLite. |
-| `/nyx purge` | Usunięcie wszystkich lokalnych wymian użytkownika po potwierdzeniu przyciskiem (ważnym 60 sekund). |
-| `/nyx clean liczba:3` | Usunięcie 1–10 ostatnich lokalnych wymian. Jedna wymiana to tekst użytkownika i odpowiedź Nyx. |
+| `/nyx purge` | Usunięcie lokalnych wymian użytkownika tylko na bieżącym kanale po potwierdzeniu przyciskiem (ważnym 60 sekund). |
+| `/nyx clean liczba:3` | Usunięcie 1–10 ostatnich lokalnych wymian użytkownika tylko na bieżącym kanale. Jedna wymiana to tekst użytkownika i odpowiedź Nyx. |
 | `/nyx privacy` | Opis zapisywanych danych, filtrów i retencji, bez ujawniania treści rozmów. |
 | `/nyx fuel` | Szacowane saldo USD i zapas odpowiedzi. |
 
-Purge/clean zachowują opinię, reputację, flagi i zabezpieczenia przed nabijaniem punktów. Przerywają wszystkie lokalne łańcuchy rozmów tej osoby, również ankietę zakupową i kontekst muzyki. Zapytanie API trwające podczas usuwania nie odtworzy lokalnej pamięci. Wysłanej już wiadomości nie cofamy. Komendy nie kasują wiadomości na Discordzie ani zapisów po stronie OpenAI; o usunięcie pozostałych danych lokalnych należy poprosić administrację.
+Purge/clean zachowują opinię, reputację, flagi i zabezpieczenia przed nabijaniem punktów. Usuwają też powiązane odpowiedzi Nyx i unieważniają metadane rozmów na bieżącym kanale (dla wszystkich autorów), również ankietę zakupową i ostatnie ID muzyki. Wiadomości innych osób oraz dane innych kanałów pozostają. Zapytanie API trwające podczas usuwania nie odtworzy lokalnej pamięci. Wysłanej już wiadomości nie cofamy. Komendy nie kasują wiadomości na Discordzie ani zapisów po stronie OpenAI; o usunięcie pozostałych danych lokalnych należy poprosić administrację.
 
 ### Paliwo: saldo startowe i szacowanie kosztów
 
@@ -209,3 +211,42 @@ nie wymagają instalowania stickerów na serwerze. Bot potrzebuje uprawnienia
 
 `war` i `bored` są na razie tylko zasobami. Automatyczne zagajenia,
 screenshoty i tryb nocny pozostają wyłączone.
+
+
+
+### Wspólny kontekst kanału
+
+`CHAT_MEMORY.CHANNELS` domyślnie dopuszcza wyłącznie `💬-lobby`, `🌍-lobby-int`,
+`🍻-kantyna` i `🧨-offtop`. Nazwy można zastąpić ID; bot wymaga restartu po edycji
+konfiguracji. Wątki nie są automatycznie dozwolone. Lista ogranicza także spontaniczne
+żarty i strofowanie. Poranny raport ma niezależne kanały i uprawnienia.
+
+Kontekst jest osobny dla serwera i kanału. Obserwator zapisuje nowe wiadomości
+użytkowników z AI Access także wtedy, gdy nie zaczepiają Nyx. Sam zapis nie wywołuje
+API ani nie nalicza punktów. Wiadomości botów i osób bez roli są pomijane; treść innych
+kanałów nie jest dołączana. Nyx odpowiada zgodnie z dotychczasowymi wyzwalaczami
+(mention, odpowiedź do Nyx, imię i włączone spontaniczne reakcje).
+
+Każda pozycja zawiera ID wiadomości i autora, nick, czas, typ user/nyx, powiązanie
+z wiadomością użytkownika oraz ID odpowiedzi. Zapisane odpowiedzi należą do wymiany
+ich adresata, więc clean/purge usuwają je razem z jego wpisem. Sam obrazek ma krótki
+znacznik tekstowy, bez analizy obrazu. Opinie, reputacja i ankieta zakupowa nadal
+należą do konkretnego autora. Cudze wypowiedzi nie są oceniane przy naliczaniu jego punktów.
+
+Przed dołączeniem historii sprawdzamy role jej właścicieli. Potwierdzona utrata AI Access
+usuwa ich wpisy i powiązane odpowiedzi z pamięci danego kanału. Jeśli Discord nie pozwoli
+zweryfikować roli, te wpisy są pomijane w żądaniu, lecz nie kasowane. Weryfikacja może
+zwiększyć czas odpowiedzi, nie wykonuje wywołań OpenAI.
+
+Lokalny filtr jest heurystyczny: rozpoznaje m.in. e-maile, telefony, adresy i niektóre
+jawne deklaracje danych. Nie gwarantuje wykrycia wszystkich imion lub danych osobowych.
+Przy aktywnej rozmowie dodatkowa ocena modelu może usunąć jej wpis i zablokować zapis
+odpowiedzi. Aktualizacja regulaminu powinna uwzględniać pasywną pamięć rozmów osób z AI Access.
+
+Migracja automatycznie tworzy `channel_messages`. Nie przypisuje starych wpisów
+`message_bank` do kanałów: nie miały tych identyfikatorów. Stary bank pozostaje poza
+kontekstem i wygasa zgodnie z retencją 12h. Punkty, opinie, flagi i zdarzenia pozostają.
+Przed pierwszym startem po aktualizacji zalecana jest kopia lokalnej bazy.
+
+Tekstowe `/nyx ...` jest zatrzymywane przed modelem i wyświetla instrukcję użycia
+menu Discorda. Nie uruchamia publicznego odczytu reputacji lub opinii.

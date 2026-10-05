@@ -25,3 +25,19 @@ function deleteUserExchanges(db, userId, count = null) {
 }
 
 module.exports = { memoryVersion, forgetConversation, deleteUserExchanges };
+
+
+function channelVersion(state, guildId, channelId) {
+  return state.channelVersions?.get(`${guildId}:${channelId}`) ?? 0;
+}
+function forgetChannelConversation(state, guildId, channelId) {
+  const prefix = `${guildId}:${channelId}`;
+  state.channelVersions ??= new Map();
+  state.channelVersions.set(prefix, channelVersion(state, guildId, channelId) + 1);
+  for (const key of state.conversations.keys()) {
+    if (key.startsWith(`${prefix}:`)) state.conversations.delete(key);
+  }
+  state.channelTopics?.delete(prefix);
+}
+module.exports.channelVersion = channelVersion;
+module.exports.forgetChannelConversation = forgetChannelConversation;

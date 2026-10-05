@@ -1,6 +1,7 @@
 const { randomBytes } = require('node:crypto');
 const { getRelationship, deleteExpired } = require('./memory');
-const { deleteUserExchanges, forgetConversation } = require('./memory-control');
+const { forgetChannelConversation } = require('./memory-control');
+const { deleteChannelExchanges } = require('./channel-memory');
 const { getFuel } = require('./fuel');
 
 const EPHEMERAL = 64;
@@ -9,8 +10,8 @@ const COMMAND = {
   options: [
     ['help', 'Opis Nyx i lista komend'],
     ['rep', 'Twoja reputacja i zapisana opinia Nyx'],
-    ['purge', 'Usuń wszystkie swoje wymiany z pamięci Nyx'],
-    ['clean', 'Usuń od 1 do 10 ostatnich swoich wymian'],
+    ['purge', 'Usuń swoje wymiany z pamięci bieżącego kanału'],
+    ['clean', 'Usuń od 1 do 10 ostatnich swoich wymian na tym kanale'],
     ['privacy', 'Jakie dane zapisuje Nyx?'],
     ['fuel', 'Szacowany zapas środków na API'],
   ].map(([name, description]) => ({ type: 1, name, description,
@@ -72,7 +73,7 @@ function createCommandHandler({ memoryDb, state, openai, infoChannel = '🌐-ai'
       if (button) {
         const [, action, token] = interaction.customId.split(':');
         const confirmation = confirmations.get(token);
-        if (!confirmation || confirmation.userId !== interaction.user.id || confirmation.guildId !== interaction.guildId) {
+        if (!confirmation || confirmation.userId !== interaction.user.id || confirmation.guildId !== interaction.guildId || confirmation.channelId !== interaction.channelId) {
           await reply('Potwierdzenie wygasło albo należy do innej osoby. Uruchom /nyx purge ponownie.');
           return;
         }
@@ -80,9 +81,9 @@ function createCommandHandler({ memoryDb, state, openai, infoChannel = '🌐-ai'
         confirmations.delete(token);
         let content = 'Usuwanie anulowane.';
         if (action === 'yes') {
-          const count = deleteUserExchanges(memoryDb, interaction.user.id);
-          forgetConversation(state, interaction.user.id);
-          content = `Usunęłam ${count} wymian i przerwałam aktywny kontekst rozmów. Reputacja i opinia pozostają bez zmian. Wiadomości na Discordzie pozostają.`;
+          const count = deleteChannelExchanges(memoryDb, { guildId: interaction.guildId, channelId: interaction.channelId, userId: interaction.user.id });
+          forgetChannelConversation(state, interaction.guildId, interaction.channelId);
+          content = `Usunęłam ${count} wymian na tym kanale i odświeżyłam jego kontekst. Reputacja i opinia pozostają bez zmian. Wiadomości na Discordzie pozostają.`;
         }
         await interaction.update({ content, components: [], allowedMentions: { parse: [] } });
         return;
@@ -90,28 +91,28 @@ function createCommandHandler({ memoryDb, state, openai, infoChannel = '🌐-ai'
       const subcommand = interaction.options.getSubcommand();
       if (subcommand === 'purge') {
         const token = randomBytes(12).toString('hex');
-        confirmations.set(token, { userId: interaction.user.id, guildId: interaction.guildId, expiresAt: now + 60000 });
-        await interaction.reply({ content: 'Usunąć wszystkie Twoje wymiany z lokalnej pamięci Nyx? Reputacja i opinia zostaną. Potwierdzenie jest ważne przez minutę.',
+        confirmations.set(token, { userId: interaction.user.id, guildId: interaction.guildId, channelId: interaction.channelId, expiresAt: now + 60000 });
+        await interaction.reply({ content: 'Usunąć wszystkie Twoje wymiany z pamięci bieżącego kanału, razem z powiązanymi odpowiedziami Nyx? Reputacja i opinia zostaną. Potwierdzenie jest ważne przez minutę.',
           flags: EPHEMERAL, allowedMentions: { parse: [] }, components: [{ type: 1, components: [
             { type: 2, style: 4, label: 'Usuń pamięć rozmów', custom_id: `nyx-purge:yes:${token}` },
             { type: 2, style: 2, label: 'Anuluj', custom_id: `nyx-purge:no:${token}` },
           ] }] });
       } else if (subcommand === 'clean') {
         deleteExpired(memoryDb);
-        const count = deleteUserExchanges(memoryDb, interaction.user.id, interaction.options.getInteger('liczba', true));
-        forgetConversation(state, interaction.user.id);
-        await reply(`Usunęłam ${count} ostatnich wymian i przerwałam aktywny kontekst rozmów. Reputacja i opinia pozostają bez zmian. Nie usuwam wiadomości z Discorda.`);
+        const count = deleteChannelExchanges(memoryDb, { guildId: interaction.guildId, channelId: interaction.channelId, userId: interaction.user.id, count: interaction.options.getInteger('liczba', true) });
+        forgetChannelConversation(state, interaction.guildId, interaction.channelId);
+        await reply(`Usunęłam ${count} ostatnich wymian na tym kanale i odświeżyłam jego kontekst. Reputacja i opinia pozostają bez zmian. Nie usuwam wiadomości z Discorda.`);
       } else if (subcommand === 'rep') {
         const relationship = getRelationship(memoryDb, interaction.user.id);
         await reply(`**Reputacja: ${relationship.sympathy} / 20** (skala −20…20)\nRelacja: ${reputationLabel(relationship.sympathy)}\n**Zapisana opinia Nyx:**\n${relationship.opinion}`);
       } else if (subcommand === 'fuel') {
         await reply(formatFuel(getFuel(memoryDb), openai?.fuelRecordingFailed?.()));
       } else if (subcommand === 'privacy') {
-        await reply('Nyx zapisuje ID Discorda, nick, reputację, opinię i status relacji oraz do 10 ostatnich wymian na maksymalnie 12 godzin. Filtr próbuje wykluczać treści z danymi osobowymi, ale może się pomylić. Zapisuje też zdarzenia punktacji, reakcje, czasowe skróty powtarzanych wiadomości i zbiorcze dane kosztów API. Treść rozmów jest przekazywana OpenAI. /nyx clean i /nyx purge usuwają lokalne wymiany; nie usuwają danych po stronie Discorda/OpenAI ani opinii i reputacji. O usunięcie pozostałych danych poproś administrację. Ta komenda nie wyświetla Twoich zapisanych rozmów.');
+        await reply('Nyx zapisuje ID Discorda, nick, reputację, opinię i status relacji oraz do 20 ostatnich wiadomości na kanał (także wypowiedzi osób z AI Access nieskierowane do Nyx i powiązane odpowiedzi Nyx), z limitem 12000 znaków i retencją do 12 godzin. Filtr próbuje wykluczać treści z danymi osobowymi, ale może się pomylić. Zapisuje też zdarzenia punktacji, reakcje, czasowe skróty powtarzanych wiadomości i zbiorcze dane kosztów API. Treść rozmów jest przekazywana OpenAI. /nyx clean i /nyx purge usuwają Twoje lokalne wymiany tylko na kanale wywołania, wraz z powiązanymi odpowiedziami Nyx; nie usuwają danych po stronie Discorda/OpenAI ani opinii i reputacji. O usunięcie pozostałych danych poproś administrację. Ta komenda nie wyświetla Twoich zapisanych rozmów.');
       } else if (subcommand === 'help') {
         const channel = interaction.guild.channels.cache.find(channel => channel.id === infoChannel || channel.name === infoChannel);
         await reply('Jestem Nyx, holograficzna AI i towarzysz rozmów załogi UMC. Pomagam z informacjami o Star Citizen i pokrewnych tematach. Wywołaj mnie przez @Nyx AI lub odpowiedź na moją wiadomość; mogę też reagować na swoje imię.\n\n' +
-          '**Komendy:**\n/nyx help: pomoc\n/nyx rep: reputacja i opinia\n/nyx purge: usuń wszystkie lokalne wymiany\n/nyx clean liczba: usuń 1–10 ostatnich wymian\n/nyx privacy: zasady pamięci\n/nyx fuel: szacowany zapas środków\n\n' +
+          '**Komendy:**\n/nyx help: pomoc\n/nyx rep: reputacja i opinia\n/nyx purge: usuń swoje lokalne wymiany na tym kanale\n/nyx clean liczba: usuń 1–10 swoich ostatnich wymian na tym kanale\n/nyx privacy: zasady pamięci\n/nyx fuel: szacowany zapas środków\n\n' +
           `Więcej informacji: ${channel ? `<#${channel.id}>` : `kanał ${infoChannel}`}. Odpowiedzi na komendy widzisz tylko Ty.`);
       }
     } catch (error) {
@@ -124,3 +125,4 @@ function createCommandHandler({ memoryDb, state, openai, infoChannel = '🌐-ai'
 }
 
 module.exports = { COMMAND, registerNyxCommands, createCommandHandler, reputationLabel, formatFuel };
+

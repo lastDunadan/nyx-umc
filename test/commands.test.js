@@ -1,8 +1,10 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { openMemory, saveExchange, getRecentExchanges, getRelationship } = require('../modules/memory');
+const { openMemory, getRelationship } = require('../modules/memory');
 const { COMMAND, createCommandHandler, registerNyxCommands } = require('../modules/commands');
-const { deleteUserExchanges, forgetConversation, memoryVersion } = require('../modules/memory-control');
+const { deleteUserExchanges, forgetConversation, channelVersion } = require('../modules/memory-control');
+const { saveChannelMessage, getChannelHistory } = require('../modules/channel-memory');
+function getRecentExchanges(db, userId) { return getChannelHistory(db, 'guild', 'channel').filter(row => row.authorId === userId); }
 const { initFuel } = require('../modules/fuel');
 
 function setup() {
@@ -14,7 +16,7 @@ function setup() {
   function interaction(subcommand, userId = 'a', allowed = true) {
     return {
       commandName: 'nyx', isChatInputCommand: () => true, isButton: () => false,
-      user: { id: userId, bot: false }, guildId: 'guild',
+      user: { id: userId, bot: false }, guildId: 'guild', channelId: 'channel',
       guild: { channels: { cache: { find: () => ({ id: 'info' }) } } },
       member: { roles: allowed ? ['access'] : [] },
       options: { getSubcommand: () => subcommand, getInteger: () => 2 },
@@ -23,7 +25,7 @@ function setup() {
     };
   }
   function save(userId, content) {
-    saveExchange(db, { userId, displayName: 'Tester', content, response: 'OK', containsPersonalData: false });
+    saveChannelMessage(db, { guildId: 'guild', channelId: 'channel', messageId: `${userId}:${content}`, userId, displayName: 'Tester', content });
   }
   return { db, state, handle, replies, interaction, save };
 }
@@ -59,7 +61,9 @@ test('Clean usuwa najnowsze wymiany tylko autora, zachowuje opinię i punkty', a
     assert.equal(getRelationship(x.db, 'a').sympathy, 16);
     assert.equal(getRelationship(x.db, 'a').opinion, 'Miła rozmowa.');
     assert.equal(x.state.conversations.size, 1);
-    assert.equal(memoryVersion(x.state, 'a'), 1);
+    assert.ok(x.state.conversations.has('guild:other:a'));
+    assert.ok(!x.state.conversations.has('guild:channel:b'));
+    assert.equal(channelVersion(x.state, 'guild', 'channel'), 1);
     assert.equal(x.replies[0].flags, 64);
     assert.throws(() => deleteUserExchanges(x.db, 'a', 11));
     assert.throws(() => deleteUserExchanges(x.db, 'a', 0));
@@ -81,9 +85,9 @@ test('Purge wymaga potwierdzenia autora; nie daje się powtórzyć ani wykonać 
     assert.equal(getRecentExchanges(x.db, 'a').length, 1);
     await x.handle(button('a'));
     assert.equal(getRecentExchanges(x.db, 'a').length, 0);
-    const version = memoryVersion(x.state, 'a');
+    const version = channelVersion(x.state, 'guild', 'channel');
     await x.handle(button('a'));
-    assert.equal(memoryVersion(x.state, 'a'), version);
+    assert.equal(channelVersion(x.state, 'guild', 'channel'), version);
   } finally { x.db.close(); }
 });
 
@@ -126,7 +130,25 @@ test('Help, rep, privacy i fuel są prywatne i nie wywołują modelu', async () 
 
 test('Wersja pamięci blokuje późny zapis po purge, również bez wcześniejszych rozmów', () => {
   const state = { conversations: new Map() };
+  const { memoryVersion } = require('../modules/memory-control');
   const captured = memoryVersion(state, 'a');
   forgetConversation(state, 'a');
   assert.notEqual(captured, memoryVersion(state, 'a'));
+});
+
+
+test('Purge jest przypisane do kanału potwierdzenia i nie usuwa danych w innym kanale', async () => {
+  const x = setup();
+  try {
+    x.save('a', 'ten kanał');
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'a', messageId: 'other', displayName: 'Tester', content: 'inny kanał' });
+    await x.handle(x.interaction('purge'));
+    const customId = x.replies.at(-1).components[0].components[0].custom_id;
+    const button = { ...x.interaction('purge'), isChatInputCommand: () => false, isButton: () => true, customId };
+    await x.handle({ ...button, channelId: 'other' });
+    assert.equal(getRecentExchanges(x.db, 'a').length, 1);
+    await x.handle(button);
+    assert.equal(getRecentExchanges(x.db, 'a').length, 0);
+    assert.equal(getChannelHistory(x.db, 'guild', 'other').length, 1);
+  } finally { x.db.close(); }
 });

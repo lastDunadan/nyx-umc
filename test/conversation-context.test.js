@@ -23,7 +23,7 @@ require.cache[errorsPath] = {
 };
 const createConversationHandler = require('../modules/conversation');
 
-test('Kontynuacja, zmiana modułów, izolacja użytkowników, limit tur i TTL', async () => {
+test('Jawne żądania bez łańcucha API, zmiana modułów, metadane użytkowników i TTL', async () => {
   const calls = [];
   const state = {
     conversations: new Map(), lastSpontaneousReply: new Map(), lastOffendedReply: new Map(),
@@ -74,14 +74,14 @@ test('Kontynuacja, zmiana modułów, izolacja użytkowników, limit tur i TTL', 
   request = await send('Co lubisz w Argo?', 'second');
   assert.equal(request.previous_response_id, undefined);
   request = await send('Nyx, tylko tyle?');
-  assert.equal(request.previous_response_id, 'response-3');
+  assert.equal(request.previous_response_id, undefined);
 
   request = await send('Opowiedz o UMC.');
   assert.equal(request.previous_response_id, undefined);
   assert.match(request.instructions, /UMC_MODULE/);
   assert.doesNotMatch(request.instructions, /SHIPS_MODULE/);
   request = await send('Opowiedz więcej.');
-  assert.equal(request.previous_response_id, 'response-6');
+  assert.equal(request.previous_response_id, undefined);
 
   request = await send('Jaką muzykę lubisz?');
   assert.equal(request.previous_response_id, undefined);
@@ -142,10 +142,10 @@ test('Rozmowa dołącza gust broni na żądanie i usuwa go po zmianie tematu', a
   assert.deepEqual(request.text.format.schema.properties.musicTrackId.enum, ['']);
 
   request = await send('Tylko tyle?');
-  assert.equal(request.previous_response_id, 'weapons-response-1');
+  assert.equal(request.previous_response_id, undefined);
   assert.ok(request.instructions.includes(personality.weaponPrefs));
   request = await send('Poleć loadout.');
-  assert.equal(request.previous_response_id, 'weapons-response-2');
+  assert.equal(request.previous_response_id, undefined);
 
   request = await send('Jaką broń dobrać do Arrowa?');
   assert.equal(request.previous_response_id, undefined);
@@ -230,3 +230,4 @@ test('Ankieta zakupu: werdykt kodu, kontynuacja, izolacja i brak narzucania jej 
   assert.equal(calls.at(-1).text.format.schema.properties.purchaseIntent, undefined);
   assert.equal(state.conversations.get('g:c:first').purchaseSurvey, null);
 });
+
