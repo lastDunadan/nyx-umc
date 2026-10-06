@@ -1,5 +1,6 @@
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { randomUUID } = require('node:crypto');
+const { TECHNICAL_TTL_MS } = require('./retention');
 
 // USD / 1 mln tokenów, standardowy tryb. Źródło: cennik OpenAI, 2026-10-04.
 // Duże konteksty i niestandardowe tryby pozostawiamy jako nieoszacowane.
@@ -27,6 +28,12 @@ function initFuel(db) {
     CREATE TABLE IF NOT EXISTS fuel_groups (
       group_id TEXT PRIMARY KEY, completed INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS fuel_archive (
+      id INTEGER PRIMARY KEY CHECK (id = 1), spent REAL NOT NULL DEFAULT 0,
+      calls INTEGER NOT NULL DEFAULT 0, unknown INTEGER NOT NULL DEFAULT 0,
+      last_usage_id INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT OR IGNORE INTO fuel_archive (id) VALUES (1);
   `);
   if (!db.prepare('PRAGMA table_info(fuel_checkpoint)').all().some(row => row.name === 'tracking_gap')) {
     db.exec('ALTER TABLE fuel_checkpoint ADD COLUMN tracking_gap INTEGER NOT NULL DEFAULT 0');
@@ -37,9 +44,14 @@ function setFuelBalance(db, dollars, now = Date.now()) {
   if (!Number.isFinite(dollars) || dollars < 0) throw new Error('Niepoprawne saldo USD.');
   db.exec('BEGIN IMMEDIATE');
   try {
-    const last = db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM fuel_usage').get().id;
+    const last = db.prepare(`SELECT MAX(
+      COALESCE((SELECT MAX(id) FROM fuel_usage), 0),
+      (SELECT last_usage_id FROM fuel_archive WHERE id = 1),
+      (SELECT after_usage_id FROM fuel_checkpoint WHERE id = 1)
+    ) AS id`).get().id;
     db.prepare(`UPDATE fuel_checkpoint SET balance_usd = ?, confirmed_at = ?,
       after_usage_id = ?, tracking_gap = 0 WHERE id = 1`).run(dollars, now, last);
+    db.prepare('UPDATE fuel_archive SET spent = 0, calls = 0, unknown = 0 WHERE id = 1').run();
     db.exec('COMMIT');
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
@@ -61,9 +73,12 @@ function recordFuelUsage(db, result, request, scope = {}, prices = PRICES) {
     ? ((input - cached) * price.input + cached * price.cached + output * price.output) / 1e6 + searches * WEB_SEARCH_USD
     : null;
   db.prepare(`INSERT OR IGNORE INTO fuel_usage
-    (response_id, group_id, category, created_at, model, input_tokens,
+    (id, response_id, group_id, category, created_at, model, input_tokens,
      cached_tokens, output_tokens, searches, cost_usd)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    VALUES ((SELECT MAX(COALESCE((SELECT MAX(id) FROM fuel_usage), 0),
+      (SELECT last_usage_id FROM fuel_archive WHERE id = 1),
+      (SELECT after_usage_id FROM fuel_checkpoint WHERE id = 1)) + 1),
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     result.id ?? randomUUID(), scope.groupId ?? randomUUID(), scope.category ?? 'background',
     Date.now(), model ?? 'unknown', input ?? null, cached, output ?? null, searches, cost
   );
@@ -111,6 +126,8 @@ function getFuel(db) {
   const usage = db.prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS spent,
     COUNT(*) AS calls, COALESCE(SUM(cost_usd IS NULL), 0) AS unknown
     FROM fuel_usage WHERE id > ?`).get(checkpoint.after_usage_id);
+  const archive = db.prepare('SELECT * FROM fuel_archive WHERE id = 1').get();
+  for (const key of ['spent', 'calls', 'unknown']) usage[key] += archive[key];
   const recent = db.prepare(`SELECT group_id, SUM(cost_usd) AS cost
     FROM fuel_usage WHERE category = 'message' AND group_id IN (
       SELECT group_id FROM fuel_groups WHERE completed = 1
@@ -125,4 +142,26 @@ function getFuel(db) {
     replies: balance !== null && average ? Math.floor(Math.max(0, balance) / average) : null };
 }
 
-module.exports = { initFuel, setFuelBalance, recordFuelUsage, createMeteredOpenAI, getFuel, PRICES };
+function compactFuelUsage(db, now = Date.now()) {
+  const ownTransaction = !db.isTransaction;
+  if (ownTransaction) db.exec('BEGIN IMMEDIATE');
+  try {
+    // Całe wymiany, aby średnia nie liczyła tylko części researchu.
+    const expired = `SELECT group_id FROM fuel_usage GROUP BY group_id HAVING MAX(created_at) <= ?`;
+    const checkpoint = db.prepare('SELECT after_usage_id FROM fuel_checkpoint WHERE id = 1').get();
+    const totals = db.prepare(`SELECT COALESCE(SUM(cost_usd), 0) AS spent,
+      COUNT(*) AS calls, COALESCE(SUM(cost_usd IS NULL), 0) AS unknown
+      FROM fuel_usage WHERE id > ? AND group_id IN (${expired})`)
+      .get(checkpoint.after_usage_id, now - TECHNICAL_TTL_MS);
+    const last = db.prepare(`SELECT COALESCE(MAX(id), 0) AS id FROM fuel_usage
+      WHERE group_id IN (${expired})`).get(now - TECHNICAL_TTL_MS).id;
+    db.prepare(`UPDATE fuel_archive SET spent = spent + ?, calls = calls + ?,
+      unknown = unknown + ?, last_usage_id = MAX(last_usage_id, ?) WHERE id = 1`)
+      .run(totals.spent, totals.calls, totals.unknown, last);
+    db.prepare(`DELETE FROM fuel_usage WHERE group_id IN (${expired})`).run(now - TECHNICAL_TTL_MS);
+    db.prepare(`DELETE FROM fuel_groups WHERE group_id NOT IN (SELECT group_id FROM fuel_usage)`).run();
+    if (ownTransaction) db.exec('COMMIT');
+  } catch (error) { if (ownTransaction) db.exec('ROLLBACK'); throw error; }
+}
+
+module.exports = { initFuel, setFuelBalance, recordFuelUsage, createMeteredOpenAI, getFuel, compactFuelUsage, PRICES };

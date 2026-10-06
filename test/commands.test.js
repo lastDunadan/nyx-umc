@@ -51,6 +51,7 @@ test('Clean usuwa najnowsze wymiany tylko autora, zachowuje opinię i punkty', a
   try {
     for (const text of ['pierwsza', 'druga', 'trzecia']) x.save('a', text);
     x.save('b', 'inna osoba');
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'a', messageId: 'other', displayName: 'Tester', content: 'zachowaj drugi kanał' });
     x.db.prepare("UPDATE users SET sympathy=16, opinion='Miła rozmowa.' WHERE user_id='a'").run();
     x.state.conversations.set('guild:channel:a', {});
     x.state.conversations.set('guild:other:a', {});
@@ -58,6 +59,7 @@ test('Clean usuwa najnowsze wymiany tylko autora, zachowuje opinię i punkty', a
     await x.handle(x.interaction('clean'));
     assert.deepEqual(getRecentExchanges(x.db, 'a').map(r => r.content), ['pierwsza']);
     assert.equal(getRecentExchanges(x.db, 'b').length, 1);
+    assert.equal(getChannelHistory(x.db, 'guild', 'other').length, 1);
     assert.equal(getRelationship(x.db, 'a').sympathy, 16);
     assert.equal(getRelationship(x.db, 'a').opinion, 'Miła rozmowa.');
     assert.equal(x.state.conversations.size, 1);
@@ -65,6 +67,7 @@ test('Clean usuwa najnowsze wymiany tylko autora, zachowuje opinię i punkty', a
     assert.ok(!x.state.conversations.has('guild:channel:b'));
     assert.equal(channelVersion(x.state, 'guild', 'channel'), 1);
     assert.equal(x.replies[0].flags, 64);
+    assert.match(x.replies[0].content, /na tym kanale/);
     assert.throws(() => deleteUserExchanges(x.db, 'a', 11));
     assert.throws(() => deleteUserExchanges(x.db, 'a', 0));
   } finally { x.db.close(); }
@@ -137,11 +140,18 @@ test('Wersja pamięci blokuje późny zapis po purge, również bez wcześniejsz
 });
 
 
-test('Purge jest przypisane do kanału potwierdzenia i nie usuwa danych w innym kanale', async () => {
+test('Potwierdzenie purge jest przypisane do kanału, ale usuwa wymiany autora ze wszystkich kanałów', async () => {
   const x = setup();
   try {
     x.save('a', 'ten kanał');
     saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'a', messageId: 'other', displayName: 'Tester', content: 'inny kanał' });
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'a', authorId: 'nyx', kind: 'nyx', exchangeId: 'other', messageId: 'answer', displayName: 'Nyx', content: 'odpowiedź' });
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'b', messageId: 'b-other', displayName: 'Tester B', content: 'inna osoba' });
+    saveChannelMessage(x.db, { guildId: 'second-guild', channelId: 'c', userId: 'a', messageId: 'second', displayName: 'Tester', content: 'inny serwer' });
+    x.db.prepare("INSERT INTO message_bank (user_id, created_at, content, response) VALUES ('a', ?, 'stare', 'OK')").run(Date.now());
+    x.db.prepare("UPDATE users SET sympathy=16, opinion='Zachowaj opinię' WHERE user_id='a'").run();
+    channelVersion(x.state, 'guild', 'other');
+    channelVersion(x.state, 'second-guild', 'c');
     await x.handle(x.interaction('purge'));
     const customId = x.replies.at(-1).components[0].components[0].custom_id;
     const button = { ...x.interaction('purge'), isChatInputCommand: () => false, isButton: () => true, customId };
@@ -149,6 +159,13 @@ test('Purge jest przypisane do kanału potwierdzenia i nie usuwa danych w innym 
     assert.equal(getRecentExchanges(x.db, 'a').length, 1);
     await x.handle(button);
     assert.equal(getRecentExchanges(x.db, 'a').length, 0);
-    assert.equal(getChannelHistory(x.db, 'guild', 'other').length, 1);
+    assert.deepEqual(getChannelHistory(x.db, 'guild', 'other').map(r => r.ownerId), ['b']);
+    assert.equal(getChannelHistory(x.db, 'second-guild', 'c').length, 0);
+    assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM message_bank').get().n, 0);
+    assert.equal(getRelationship(x.db, 'a').sympathy, 16);
+    assert.equal(getRelationship(x.db, 'a').opinion, 'Zachowaj opinię');
+    assert.equal(channelVersion(x.state, 'guild', 'other'), 1);
+    assert.equal(channelVersion(x.state, 'second-guild', 'c'), 1);
+    assert.match(x.replies.at(-1).content, /4 wymian ze wszystkich kanałów/);
   } finally { x.db.close(); }
 });

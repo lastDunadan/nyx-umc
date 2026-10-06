@@ -17,8 +17,8 @@ if (!process.env.DISCORD_TOKEN || !process.env.OPENAI_API_KEY) {
 }
 
 const memoryDb = openMemory();
-deleteExpired(memoryDb);
 initFuel(memoryDb);
+deleteExpired(memoryDb);
 
 const memoryCleanupTimer = setInterval(() => {
   try {

@@ -4,6 +4,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { DatabaseSync } = require('node:sqlite');
 const { canStoreExchange } = require('./privacy');
+const { TECHNICAL_TTL_MS, isExpiredEvent } = require('./retention');
 
 const MESSAGE_TTL_MS = 12 * 60 * 60 * 1000;
 const MAX_EXCHANGES = 10;
@@ -131,6 +132,24 @@ function deleteExpired(db, now = Date.now()) {
   db.prepare('DELETE FROM message_bank WHERE created_at <= ?')
     .run(now - MESSAGE_TTL_MS);
   db.prepare('DELETE FROM message_fingerprints WHERE created_at <= ?').run(now - REPEAT_WINDOW_MS);
+  // Trzy ostatnie oceny są nadal potrzebne do zachowania logiki relacji.
+  db.prepare(`DELETE FROM sympathy_events WHERE created_at <= ? AND rowid NOT IN (
+    SELECT event_rowid FROM (
+      SELECT rowid AS event_rowid, ROW_NUMBER() OVER (
+        PARTITION BY user_id ORDER BY created_at DESC, rowid DESC
+      ) AS position FROM sympathy_events WHERE event_id LIKE 'message:%'
+    ) WHERE position <= 3
+  )`).run(now - TECHNICAL_TTL_MS);
+  db.prepare(`DELETE FROM conversation_streaks WHERE
+    COALESCE(started_at, 0) <= ? AND COALESCE(last_awarded_at, 0) <= ?
+    AND COALESCE(last_counted_at, 0) <= ?`)
+    .run(now - TECHNICAL_TTL_MS, now - TECHNICAL_TTL_MS, now - TECHNICAL_TTL_MS);
+  const tables = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name));
+  if (tables.has('sticker_deliveries')) {
+    const { localDay } = require('./stickers');
+    db.prepare('DELETE FROM sticker_deliveries WHERE day < ?').run(localDay(now - TECHNICAL_TTL_MS));
+  }
+  if (tables.has('fuel_usage') && tables.has('fuel_archive')) require('./fuel').compactFuelUsage(db, now);
 }
 
 function getRecentExchanges(db, userId) {
@@ -260,6 +279,9 @@ function applySympathyEvent(db, {
   if (!eventId || !userId || !Number.isInteger(points) ||
     points < -3 || points > 3) {
     throw new Error('Niepoprawne zdarzenie sympathy.');
+  }
+  if (isExpiredEvent(eventId, now)) {
+    return { applied: false, sympathy: getRelationship(db, userId).sympathy, delta: 0 };
   }
 
   db.exec('BEGIN IMMEDIATE');
@@ -501,7 +523,8 @@ function getRecentMessageScoreSum(db, userId) {
   return rows.reduce((sum, row) => sum + row.delta, 0);
 }
 
-function undoReactionAward(db, { eventId, userId, emoji }) {
+function undoReactionAward(db, { eventId, userId, emoji, now = Date.now() }) {
+  if (isExpiredEvent(eventId, now)) return { undone: false };
   db.exec('BEGIN IMMEDIATE');
 
   try {
@@ -584,5 +607,3 @@ module.exports = {
   getRecentMessageScoreSum,
   undoReactionAward,
 };
-
-

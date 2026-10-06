@@ -1,8 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { openMemory, getRelationship } = require('../modules/memory');
-const { getChannelHistory, saveChannelMessage, deleteChannelExchanges } = require('../modules/channel-memory');
-const { forgetChannelConversation } = require('../modules/memory-control');
+const { getChannelHistory, saveChannelMessage, deleteChannelExchanges, deleteAllUserExchanges } = require('../modules/channel-memory');
+const { forgetChannelConversation, forgetAllChannelConversations } = require('../modules/memory-control');
 const createMessageHandler = require('../modules/messages');
 process.env.AI_ACCESS_ROLE_ID = 'access';
 
@@ -106,6 +106,29 @@ test('Purge podczas API dla innej osoby unieważnia wspólny kontekst i blokuje 
     assert(!getChannelHistory(x.db, 'g', 'c').some(row => row.ownerId === 'sid'));
     assert(!getChannelHistory(x.db, 'g', 'c').some(row => row.role === 'nyx'));
     assert.equal(x.state.conversations.size, 0);
+  } finally { release(); x.db.close(); }
+});
+
+test('Globalny purge blokuje równoległe odpowiedzi innych osób na wielu kanałach', async () => {
+  const x = setup();
+  let release, reached, count = 0;
+  const waiting = new Promise(r => { release = r; }), started = new Promise(r => { reached = r; });
+  try {
+    await x.handle(x.message('Pasywna wypowiedź Sida', 'sid', 'c'));
+    await x.handle(x.message('Inna wypowiedź Sida', 'sid', 'other'));
+    x.setBeforeCreate(async () => { if (++count === 2) reached(); await waiting; });
+    const pending = [x.handle(x.message('<@nyx> Sprostuj kolegę', 'last', 'c')),
+      x.handle(x.message('<@nyx> Co z jego wypowiedzią?', 'last', 'other'))];
+    await started;
+    deleteAllUserExchanges(x.db, 'sid'); forgetAllChannelConversations(x.state, 'sid');
+    release(); await Promise.all(pending);
+    assert.equal(x.replies.length, 0);
+    assert.equal(x.state.conversations.size, 0);
+    for (const channel of ['c', 'other']) {
+      const history = getChannelHistory(x.db, 'g', channel);
+      assert(!history.some(row => row.ownerId === 'sid' || row.role === 'nyx'));
+      assert(history.some(row => row.ownerId === 'last'));
+    }
   } finally { release(); x.db.close(); }
 });
 

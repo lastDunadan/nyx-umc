@@ -86,5 +86,18 @@ function deleteChannelExchanges(db, { guildId, channelId, userId, count = null }
     db.exec('COMMIT'); return groups.length;
   } catch (error) { db.exec('ROLLBACK'); throw error; }
 }
+function deleteAllUserExchanges(db, userId) {
+  if (typeof userId !== 'string' || !userId) throw new Error('Brak użytkownika.');
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const count = db.prepare(`SELECT COUNT(*) AS count FROM (
+      SELECT guild_id, channel_id, exchange_id FROM channel_messages
+      WHERE user_id = ? GROUP BY guild_id, channel_id, exchange_id
+    )`).get(userId).count;
+    db.prepare('DELETE FROM channel_messages WHERE user_id = ?').run(userId);
+    const legacy = db.prepare('DELETE FROM message_bank WHERE user_id = ?').run(userId).changes;
+    db.exec('COMMIT'); return count + Number(legacy);
+  } catch (error) { db.exec('ROLLBACK'); throw error; }
+}
 module.exports = { initChannelMemory, deleteExpiredChannelMessages, saveChannelMessage,
-  getChannelHistory, deleteChannelExchanges, removeChannelUser, isConversationChannel };
+  getChannelHistory, deleteChannelExchanges, deleteAllUserExchanges, removeChannelUser, isConversationChannel };

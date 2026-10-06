@@ -80,7 +80,7 @@ Bot pamięta w RAM pięć ostatnio udostępnionych ID w danej rozmowie użytkown
 
 `modules/memory.js` tworzy `data/nyx-memory.sqlite` przy starcie. Główne tabele to `users` (ID Discord, nick, opinia, poziom `sympathy`, flaga `special` i stan relacji), `channel_messages` (bieżąca historia kanałów), `message_bank` (stary bank, nieużywany przez rozmowę), `sympathy_events` (zdarzenia punktowe) oraz `reaction_awards` (emoji i informacja o cofnięciu punktów). Flaga `special` jest ustawiana ręcznie w bazie; bot sam jej nie przyznaje.
 
-Na kanał przechowywanych jest najwyżej **20 wiadomości łącznie** (użytkownicy i powiązane odpowiedzi Nyx), dodatkowo maksymalnie **12 000 znaków serializowanego kontekstu** i **3000 znaków na pojedynczą wiadomość**. Zbyt długie wiadomości nie są zapisywane. Wymiany starsze niż **12 godzin** są usuwane przy starcie, przy odczycie pamięci i cyklicznie co 5 minut. Zapis treści może zostać pominięty przez lokalny filtr danych osobowych i deklaracji typu „mam na imię” (`modules/privacy.js`) i ocenę modelu. Filtr ogranicza ryzyko zapisu takich danych, ale nie gwarantuje ich wykrycia w każdej postaci. Rekordy `users` i historia zdarzeń punktowych **nie mają automatycznego terminu usunięcia**. Nick Discorda jest zapisywany w `users`; należy to opisać w regulaminie i zapewnić drogę do żądania usunięcia danych.
+Na kanał przechowywanych jest najwyżej **20 wiadomości łącznie** (użytkownicy i powiązane odpowiedzi Nyx), dodatkowo maksymalnie **12 000 znaków serializowanego kontekstu** i **3000 znaków na pojedynczą wiadomość**. Zbyt długie wiadomości nie są zapisywane. Wymiany starsze niż **12 godzin** są usuwane przy starcie, przy odczycie pamięci i cyklicznie co 5 minut. Zapis treści może zostać pominięty przez lokalny filtr danych osobowych i deklaracji typu „mam na imię” (`modules/privacy.js`) i ocenę modelu. Filtr ogranicza ryzyko zapisu takich danych, ale nie gwarantuje ich wykrycia w każdej postaci. Rekordy `users` zachowują reputację, opinię i stan relacji. Dane techniczne są czyszczone po **14 dniach**: zdarzenia punktacji (z wyjątkiem trzech ostatnich ocen wiadomości każdego użytkownika), powiązane reakcje, nieaktywne liczniki rozmów i stare wpisy limitu stickerów. Reakcje do wiadomości starszych niż 14 dni nie przyznają ani nie cofają punktów. Skróty powtórek nadal wygasają po 24 godzinach. Szczegóły kosztów API po 14 dniach zastępują sumy w `fuel_archive`, zachowując saldo i informację o nieznanych kosztach; prognoza korzysta z pozostałych, świeżych wymian. Nick Discorda jest zapisywany w `users`; należy to opisać w regulaminie i zapewnić drogę do żądania usunięcia danych.
 
 Przed ręczną edycją SQLite zatrzymaj bota i zachowaj kopię bazy. W DB Browser for SQLite można obejrzeć dane oraz usunąć dane konkretnego użytkownika po jego ID Discord; klucz obcy usuwa wtedy również powiązane wymiany i zdarzenia:
 
@@ -163,16 +163,16 @@ Wszystkie odpowiedzi są ephemeral: widzi je tylko wywołująca osoba. Komendy n
 | --- | --- |
 | `/nyx help` | Opis, lista komend, instrukcja wywoływania i kanał `🌐-ai`. |
 | `/nyx rep` | Reputacja, nazwa poziomu i zapisana opinia z SQLite. |
-| `/nyx purge` | Usunięcie lokalnych wymian użytkownika tylko na bieżącym kanale po potwierdzeniu przyciskiem (ważnym 60 sekund). |
+| `/nyx purge` | Usunięcie lokalnych wymian użytkownika ze wszystkich kanałów, także ze starego banku pamięci, po potwierdzeniu przyciskiem (ważnym 60 sekund). |
 | `/nyx clean liczba:3` | Usunięcie 1–10 ostatnich lokalnych wymian użytkownika tylko na bieżącym kanale. Jedna wymiana to tekst użytkownika i odpowiedź Nyx. |
 | `/nyx privacy` | Opis zapisywanych danych, filtrów i retencji, bez ujawniania treści rozmów. |
 | `/nyx fuel` | Szacowane saldo USD i zapas odpowiedzi. |
 
-Purge/clean zachowują opinię, reputację, flagi i zabezpieczenia przed nabijaniem punktów. Usuwają też powiązane odpowiedzi Nyx i unieważniają metadane rozmów na bieżącym kanale (dla wszystkich autorów), również ankietę zakupową i ostatnie ID muzyki. Wiadomości innych osób oraz dane innych kanałów pozostają. Zapytanie API trwające podczas usuwania nie odtworzy lokalnej pamięci. Wysłanej już wiadomości nie cofamy. Komendy nie kasują wiadomości na Discordzie ani zapisów po stronie OpenAI; o usunięcie pozostałych danych lokalnych należy poprosić administrację.
+Purge/clean zachowują opinię, reputację, flagi i zabezpieczenia przed nabijaniem punktów. Usuwają też powiązane odpowiedzi Nyx. Clean unieważnia kontekst bieżącego kanału; purge unieważnia wszystkie aktywne konteksty, bo mogą zawierać usuwane wypowiedzi, również ankietę zakupową i ostatnie ID muzyki. Zapisane wiadomości innych osób pozostają; clean zachowuje także dane innych kanałów. Zapytanie API trwające podczas usuwania nie odtworzy lokalnej pamięci. Wysłanej już wiadomości nie cofamy. Komendy nie kasują wiadomości na Discordzie ani zapisów po stronie OpenAI; o usunięcie pozostałych danych lokalnych należy poprosić administrację.
 
 ### Paliwo: saldo startowe i szacowanie kosztów
 
-Po zmianach uruchomiona aplikacja automatycznie tworzy w istniejącej bazie tabele `fuel_checkpoint`, `fuel_usage` i `fuel_groups`. Nie dodawaj klucza administracyjnego OpenAI. Saldo nie jest odczytywane z panelu rozliczeń.
+Po zmianach uruchomiona aplikacja automatycznie tworzy w istniejącej bazie tabele `fuel_checkpoint`, `fuel_usage`, `fuel_groups` i `fuel_archive`. Nie dodawaj klucza administracyjnego OpenAI. Saldo nie jest odczytywane z panelu rozliczeń.
 
 Aby ustawić saldo, zatrzymaj Nyx, sprawdź aktualne kredyty w panelu OpenAI i z katalogu projektu wykonaj:
 
@@ -245,7 +245,7 @@ odpowiedzi. Aktualizacja regulaminu powinna uwzględniać pasywną pamięć rozm
 
 Migracja automatycznie tworzy `channel_messages`. Nie przypisuje starych wpisów
 `message_bank` do kanałów: nie miały tych identyfikatorów. Stary bank pozostaje poza
-kontekstem i wygasa zgodnie z retencją 12h. Punkty, opinie, flagi i zdarzenia pozostają.
+kontekstem i wygasa zgodnie z retencją 12h. Punkty, opinie i flagi pozostają; zdarzenia techniczne podlegają retencji 14 dni.
 Przed pierwszym startem po aktualizacji zalecana jest kopia lokalnej bazy.
 
 Tekstowe `/nyx ...` jest zatrzymywane przed modelem i wyświetla instrukcję użycia

@@ -28,7 +28,10 @@ module.exports = { memoryVersion, forgetConversation, deleteUserExchanges };
 
 
 function channelVersion(state, guildId, channelId) {
-  return state.channelVersions?.get(`${guildId}:${channelId}`) ?? 0;
+  state.channelVersions ??= new Map();
+  const key = `${guildId}:${channelId}`;
+  if (!state.channelVersions.has(key)) state.channelVersions.set(key, 0);
+  return state.channelVersions.get(key);
 }
 function forgetChannelConversation(state, guildId, channelId) {
   const prefix = `${guildId}:${channelId}`;
@@ -41,3 +44,14 @@ function forgetChannelConversation(state, guildId, channelId) {
 }
 module.exports.channelVersion = channelVersion;
 module.exports.forgetChannelConversation = forgetChannelConversation;
+
+function forgetAllChannelConversations(state, userId) {
+  forgetConversation(state, userId);
+  // Nawet cudze trwające zapytanie może zawierać usuwane wypowiedzi.
+  for (const [key, version] of state.channelVersions ?? []) {
+    state.channelVersions.set(key, version + 1);
+  }
+  state.conversations.clear();
+  state.channelTopics?.clear();
+}
+module.exports.forgetAllChannelConversations = forgetAllChannelConversations;
