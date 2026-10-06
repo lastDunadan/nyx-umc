@@ -17,6 +17,10 @@ const orgInfo = read('nyx-org.txt');
 const shipPrefs = read('nyx-ships.txt');
 const humorInfo = read('nyx-humor.txt');
 const musicInfo = read('nyx-music.txt');
+const weaponPrefs = read('nyx-weapons.txt');
+const projectInfo = read('nyx-project.txt');
+const organizationsInfo = read('nyx-organizations.txt');
+const creatorsInfo = read('nyx-creators.txt');
 
 // Ten fragment będzie przekazywany przy każdym zapytaniu.
 const basePrompt = [
@@ -27,6 +31,8 @@ const basePrompt = [
 
 // Z tej listy wybieramy materiały pasujące do rozmowy.
 const contextModules = [
+  { id: 'creators', title: 'Polecani twórcy i streamerzy', content: creatorsInfo },
+  { id: 'organizations', title: 'Znajome organizacje UMC', content: organizationsInfo },
   {
     id: 'umc',
     title: 'Informacje o organizacji UMC',
@@ -47,6 +53,12 @@ const contextModules = [
     title: 'Gust muzyczny Nyx',
     content: musicInfo,
   },
+  { id: 'project', title: 'Stanowisko Nyx wobec projektu SC i CIG', content: projectInfo },
+  {
+    id: 'weapons',
+    title: 'Preferencje Nyx dotyczące broni osobistej',
+    content: weaponPrefs,
+  },
 ];
 
 module.exports = {
@@ -58,4 +70,8 @@ module.exports = {
   shipPrefs,
   humorInfo,
   musicInfo,
+  weaponPrefs,
+  projectInfo,
+  organizationsInfo,
+  creatorsInfo,
 };
