@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { createResearchedResponse, basicPrompt } = require('../modules/web-research');
 const personality = require('../modules/personality');
+const { researchResult } = require('../test-support/research');
 
 const functionCall = (id) => ({ type: 'function_call', name: 'research_web', call_id: id,
   arguments: JSON.stringify({ query: 'Aktualna dostępność R97 w LIVE Star Citizen' }) });
@@ -12,14 +13,15 @@ test('Wyszukiwanie ma krótki prompt i żadnej tożsamości, historii ani previo
   const calls = [];
   const results = [
     { id: 'plan', output: [functionCall('call-1')], usage: { input_tokens: 100, output_tokens: 10 } },
-    { id: 'facts', output: [{ type: 'web_search_call' }], output_text: 'Fakt. https://robertsspaceindustries.com/en/source', usage: { input_tokens: 200, output_tokens: 20 } },
+    { id: 'facts', ...researchResult(), usage: { input_tokens: 200, output_tokens: 20 } },
     { id: 'final', output: [], output_text: '{"reply":"Odpowiedź"}', usage: { input_tokens: 300, output_tokens: 30 } },
   ];
   const result = await createResearchedResponse({ responses: { create: async (r) => { calls.push(r); return results.shift(); } } }, request);
   assert.equal(calls[0].tools[0].name, 'research_web');
   assert.equal(calls[1].instructions, basicPrompt);
   assert.equal(calls[1].previous_response_id, undefined);
-  assert.equal(calls[1].text, undefined);
+  assert.equal(calls[1].text.format.type, 'json_schema');
+  assert.deepEqual(calls[1].include, ['web_search_call.action.sources']);
   assert.equal(calls[1].tools[0].type, 'web_search');
   assert.equal(calls[1].tools[0].search_context_size, 'low');
   assert.equal(calls[1].tool_choice, 'required');
@@ -28,7 +30,7 @@ test('Wyszukiwanie ma krótki prompt i żadnej tożsamości, historii ani previo
   assert.equal(calls[2].input[0].call_id, 'call-1');
   assert.match(calls[2].input[0].output, /https:\/\//);
   assert.equal(result.response.id, 'final');
-  assert.equal(result.searches, 1);
+  assert.equal(result.searches, 2);
   assert.equal(result.researchCalls, 1);
   assert.equal(result.usage.input_tokens, 600);
 });
@@ -43,8 +45,8 @@ test('Zwykła rozmowa nie wywołuje osobnego wyszukiwania', async () => {
 test('Limit dwóch zapytań wymusza odpowiedź i chroni przed pętlą', async () => {
   const calls = [];
   const results = [
-    { id: 'a', output: [functionCall('one')] }, { output_text: 'Fakty.' },
-    { id: 'b', output: [functionCall('two')] }, { output_text: 'Inne fakty.' },
+    { id: 'a', output: [functionCall('one')] }, researchResult(),
+    { id: 'b', output: [functionCall('two')] }, researchResult(),
     { id: 'c', output: [], output_text: '{}' },
   ];
   await createResearchedResponse({ responses: { create: async r => { calls.push(r); return results.shift(); } } }, request);
@@ -66,6 +68,6 @@ test('Skrócony prompt zachowuje akapit o RSI i oddziela instrukcje wyszukiwania
   assert.ok(personality.prompt.includes(paragraph));
   assert.ok(basicPrompt.includes(paragraph));
   assert.ok(personality.prompt.length < 6000);
-  assert.ok(basicPrompt.length < 1500);
+  assert.ok(basicPrompt.length < 3500);
   assert.ok(!basicPrompt.includes(personality.identity));
 });

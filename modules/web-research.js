@@ -1,12 +1,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { evidenceFormat, validateEvidence } = require('./research-evidence');
 
 const basicPrompt = fs.readFileSync(
   path.join(__dirname, '..', 'personality', 'basic-personality.txt'), 'utf8'
 ).trim();
 const RESEARCH_TOOL = {
   type: 'function', name: 'research_web', strict: true,
-  description: 'Sprawdź aktualne fakty i źródła w internecie. Przekaż samodzielne pytanie bez danych rozmówcy. Wynik zawiera ustalenia i linki, nie osobowość Nyx.',
+  description: 'Sprawdź aktualne fakty i źródła w internecie. Podaj dokładny przedmiot (np. Railen), potrzebny status i wersję, bez danych rozmówcy. Zwraca twierdzenia z dowodami, datami i linkami; starsze informacje są oznaczone.',
   parameters: {
     type: 'object', properties: { query: { type: 'string' } },
     required: ['query'], additionalProperties: false,
@@ -14,7 +15,7 @@ const RESEARCH_TOOL = {
 };
 
 // Surowe wyniki wyszukiwania pozostają w osobnym wywołaniu bez historii i lore.
-async function createResearchedResponse(openai, request, { beforeResearch } = {}) {
+async function createResearchedResponse(openai, request, { beforeResearch, now = () => new Date() } = {}) {
   let response;
   let searches = 0;
   let researchCalls = 0;
@@ -41,24 +42,41 @@ async function createResearchedResponse(openai, request, { beforeResearch } = {}
         throw new Error('Niepoprawne pytanie do research_web.');
       }
       if (researchCalls === 0 && beforeResearch) await beforeResearch();
-      researchCalls++;
-      const facts = await openai.responses.create({
-        model: request.model, instructions: basicPrompt,
-        input: `Data sprawdzenia: ${new Date().toISOString().slice(0, 10)}\nPytanie: ${query}`,
-        reasoning: { effort: 'low' },
-        tools: [{ type: 'web_search', search_context_size: 'low' }],
-        tool_choice: 'required', max_output_tokens: 1600,
-      });
-      count(facts);
-      // Nie przekazujemy modelowi Nyx całych stron ani wewnętrznych wywołań web_search.
-      const text = facts.output_text?.trim();
-      if (!text || facts.status === 'incomplete' || text.length > 6000) {
-        throw new Error('Wyszukiwanie nie zwróciło kompletnego, krótkiego wyniku.');
+      const asOf = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Warsaw',
+        year: 'numeric', month: '2-digit', day: '2-digit' }).format(now());
+      async function research(phase) {
+        researchCalls++;
+        const facts = await openai.responses.create({
+          model: request.model, instructions: basicPrompt,
+          input: `Data sprawdzenia: ${asOf}\nBieżący rok: ${asOf.slice(0, 4)}\nEtap: ${phase}\n` +
+            (phase === 'current' ? 'Najpierw szukaj dowodów obecnego stanu z bieżącego roku i obecnego LIVE. Starsze źródła dla zmiennych faktów pomiń na tym etapie.\n'
+              : 'W pierwszym etapie nie uzyskano świeżego potwierdzenia. Sprawdź ponownie bieżący stan; możesz podać starsze materiały wyłącznie jako stan historyczny, z datą i ograniczeniem.\n') +
+            `Pytanie: ${query}`,
+          reasoning: { effort: 'low' },
+          tools: [{ type: 'web_search', search_context_size: 'low' }],
+          include: ['web_search_call.action.sources'],
+          text: { format: evidenceFormat },
+          tool_choice: 'required', max_output_tokens: 2400,
+        });
+        count(facts);
+        if (!facts.output_text?.trim() || facts.status === 'incomplete' || facts.output_text.length > 16000) {
+          throw new Error('Wyszukiwanie nie zwróciło kompletnego, krótkiego wyniku.');
+        }
+        return validateEvidence(facts, { query, asOf, phase });
       }
-      outputs.push({ type: 'function_call_output', call_id: call.call_id, output: text });
+      let evidence = await research('current');
+      if (evidence.timeSensitive && !evidence.hasCurrentEvidence && researchCalls < 2) {
+        const fallback = await research('historical');
+        evidence = { ...fallback, freshSearchFailed: true,
+          gaps: [...new Set([...evidence.gaps, ...fallback.gaps])].slice(0, 8) };
+      }
+      if (!evidence.claims.length) evidence.gaps.push('Nie potwierdzono odpowiedzi na to pytanie w dostępnych źródłach.');
+      // Jawna lista twierdzeń i dowodów, bez całych stron i surowych wyników.
+      outputs.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(evidence) });
     }
     current = {
       ...request, tools: [RESEARCH_TOOL], parallel_tool_calls: false,
+      instructions: `${request.instructions ?? ''}\nRESEARCH: korzystaj wyłącznie z twierdzeń i źródeł przekazanych przez research_web. Brak dowodu oznacza brak potwierdzenia, nie fakt negatywny. Trzymaj się question; nie podmieniaj statku lub tematu na starszą rozmowę. Historical nie potwierdza obecnego stanu: podaj datę, wersję i ograniczenie. Community/leak nazywaj odpowiednio relacją społeczności/spekulacją. Nie utożsamiaj konceptu, Flight Ready, LIVE i zakupu za aUEC. Nie dopisuj ceny ani dostępności bez odrębnego dowodu. Przy sprzecznych źródłach opisz niepewność. Cytuj bezpośrednie URL przy wspieranych twierdzeniach, bez wynajdywania nowych linków lub faktów.`,
       previous_response_id: response.id, input: outputs,
       // Po dwóch wyszukiwaniach model ma przygotować odpowiedź zamiast szukać bez końca.
       tool_choice: researchCalls >= 2 ? 'none' : 'auto',

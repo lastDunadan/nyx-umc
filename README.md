@@ -35,6 +35,8 @@ W `modules/config.js` ustaw kanały (najlepiej przez ID), przełączniki `FEATUR
 
 Nyx reaguje na oznaczenie, odpowiedź na jej wiadomość oraz swoje imię. Rozmowy i żarty TWSS dotyczą wyłącznie osób z AI Access. Stickery są załącznikami PNG: wspólny limit **2 dziennie** dla całej aplikacji i **24h przerwy na rodzaj**; restart nie zeruje limitu dziennego.
 
+Research najpierw szuka świeżych dowodów dla zmiennych informacji; starsze dane dopuszcza jako historyczne po nieudanej próbie. Daty, patch i linki są kontrolowane, a Flight Ready, LIVE i zakup za aUEC wymagają osobnych dowodów. Limit dwóch badań obejmuje także próbę awaryjną; kontrola metadanych nie gwarantuje poprawnej interpretacji treści źródła przez model.
+
 Spontaniczne `war` losuje wtrącenie przy umawianiu wspólnej akcji w grze. `bored` losuje zagajenie z tekstem na lobby lub kantynie po **6h bez zaczepienia lub wypowiedzi Nyx**, jeśli była tam aktywność AI Access w ostatnich 24h. Zwykła rozmowa załogi nie zeruje tej ciszy. Progi, szanse i kanały zmienisz w `SPONTANEOUS_STICKERS`; obie scenki działają bez wywołań OpenAI.
 
 Wybierz `/nyx` z menu komend Discorda. Odpowiedzi widzi tylko osoba wywołująca:

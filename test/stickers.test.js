@@ -70,9 +70,10 @@ test('Brak pliku i błąd Discorda nie zużywają limitu ani cooldownu', async (
 
 test('Focus jest wywołany przed researcherem i tylko raz na całą odpowiedź', async () => {
   const { createResearchedResponse } = require('../modules/web-research');
+  const { researchResult } = require('../test-support/research');
   const order = [];
   const result = await createResearchedResponse({ responses: { create: async request => {
-    if (request.tool_choice === 'required') { order.push('research'); return { output_text: 'Fakty.', output: [] }; }
+    if (request.tool_choice === 'required') { order.push('research'); return researchResult(); }
     if (request.previous_response_id) return { id: 'done', output: [], output_text: 'Odpowiedź' };
     return { id: 'start', output: [{ type: 'function_call', name: 'research_web', call_id: 'call', arguments: '{"query":"Star Citizen"}' }] };
   } } }, { model: 'test', input: 'Pytanie' }, { beforeResearch: async () => order.push('focus') });
