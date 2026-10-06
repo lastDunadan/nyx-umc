@@ -12,14 +12,19 @@ const createHumorHandler = require('./humor');
 const createScoldingHandler = require('./scolding');
 const createConversationHandler = require('./conversation');
 const { hasAiAccess } = require('./access');
+const { createStickerSender } = require('./stickers');
+const { createSpontaneousHandler } = require('./spontaneous');
 
 function createMessageHandler(context) {
   const { discord, state } = context;
+  context = { ...context, stickerSender: context.stickerSender ?? createStickerSender(context.memoryDb) };
+  const scenes = context.spontaneousHandler ?? createSpontaneousHandler(context);
   const maybeTellJoke = createHumorHandler(context);
   const maybeScold = createScoldingHandler(context);
   const respond = createConversationHandler(context);
 
-  return async function onMessage(message) {
+  const onMessage = async function (message) {
+    scenes.activity(message);
     if (message.author.bot || !message.guild) return;
     if (!isConversationChannel(message.channel)) return;
     if (!hasAiAccess(message)) {
@@ -55,6 +60,9 @@ function createMessageHandler(context) {
     }
 
     const spontaneous = FEATURES.NAME_TRIGGER && !addressedToNyx && /\bnyx\b/i.test(message.content);
+    if (addressedToNyx || spontaneous) scenes.activity(message, true);
+
+    if (FEATURES.WAR_STICKER && !addressedToNyx && !spontaneous && await scenes.maybeWar(message)) return;
 
     if (
       FEATURES.SWEAR_CHECK &&
@@ -86,6 +94,10 @@ function createMessageHandler(context) {
 
     await respond(message, spontaneous);
   };
+  onMessage.startSpontaneous = () => { if (FEATURES.BORED_STICKER) scenes.start(); };
+  onMessage.stopSpontaneous = () => scenes.stop();
+  onMessage.noteContact = (guildId, channelId) => scenes.contact(guildId, channelId);
+  return onMessage;
 }
 
 module.exports = createMessageHandler;

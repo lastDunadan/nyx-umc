@@ -6,7 +6,7 @@ const { forgetChannelConversation, forgetAllChannelConversations } = require('..
 const createMessageHandler = require('../modules/messages');
 process.env.AI_ACCESS_ROLE_ID = 'access';
 
-function setup() {
+function setup(options = {}) {
   const db = openMemory({ file: ':memory:' }), calls = [], replies = [], members = new Map();
   const state = { conversations: new Map(), relationships: new Map(), lastSpontaneousReply: new Map(),
     lastOffendedReply: new Map(), humorChecksInFlight: new Set(), scoldChecksInFlight: new Set(), lastScoldCheck: new Map() };
@@ -16,6 +16,7 @@ function setup() {
   let beforeCreate = async () => {};
   const handle = createMessageHandler({ memoryDb: db, state, discord: { user: { id: 'nyx', username: 'Nyx' } },
     personality: { basePrompt: 'CORE', contextModules: [{ id: 'ships', title: 'Statki', content: 'SHIPS' }], humorInfo: '' },
+    ...options,
     openai: { responses: { create: async request => { calls.push(request); await beforeCreate();
       return { id: `r${calls.length}`, output: [], output_text: JSON.stringify(output) }; } } },
   });
@@ -35,6 +36,27 @@ function setup() {
   return { db, calls, replies, state, members, handle, message,
     setOutput: value => { output = { ...output, ...value }; }, setBeforeCreate: value => { beforeCreate = value; } };
 }
+
+test('Spontaniczny war w zwykłej rozmowie AI Access: jedna wysyłka, brak modelu i punktów', async () => {
+  const stickers = [];
+  const { SPONTANEOUS_STICKERS } = require('../modules/config');
+  const x = setup({ random: () => 0, config: { ...SPONTANEOUS_STICKERS, WAR_CHANCE: 1 },
+    stickerSender: async (message, id, options) => {
+      stickers.push(id); await message.reply({ content: options.content, files: [{ name: `sticker-${id}-512.png` }] }); return true;
+    } });
+  try {
+    await x.handle(x.message('Zbieramy ekipę do Star Citizen.', 'sid'));
+    await x.handle(x.message('Kto leci na bunkry?', 'no-access', 'c', '🧨-offtop', false));
+    assert.equal(stickers.length, 0);
+    await x.handle(x.message('Kto leci na bunkry?', 'last'));
+    assert.deepEqual(stickers, ['war']);
+    assert.equal(x.calls.length, 0);
+    assert.equal(x.replies.length, 1);
+    assert.equal(getRelationship(x.db, 'last').sympathy, 3);
+    assert(getChannelHistory(x.db, 'g', 'c').some(row => row.role === 'nyx' && row.ownerId === 'last'));
+    assert(!getChannelHistory(x.db, 'g', 'c').some(row => row.ownerId === 'no-access'));
+  } finally { x.db.close(); }
+});
 
 test('Pełna rozmowa: sprostowanie innego autora widzi Railena, nie temat z innego kanału', async () => {
   const x = setup();

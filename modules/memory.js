@@ -150,6 +150,10 @@ function deleteExpired(db, now = Date.now()) {
     db.prepare('DELETE FROM sticker_deliveries WHERE day < ?').run(localDay(now - TECHNICAL_TTL_MS));
   }
   if (tables.has('fuel_usage') && tables.has('fuel_archive')) require('./fuel').compactFuelUsage(db, now);
+  if (tables.has('spontaneous_activity')) {
+    db.prepare(`DELETE FROM spontaneous_activity WHERE MAX(last_eligible_at, last_contact_at, last_nyx_at) <= ?`)
+      .run(now - TECHNICAL_TTL_MS);
+  }
 }
 
 function getRecentExchanges(db, userId) {

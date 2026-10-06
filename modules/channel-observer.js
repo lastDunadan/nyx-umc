@@ -48,6 +48,7 @@ function observeChannelMessage(message, { discord, memoryDb, state }) {
         .run(Number(offensive), guildId, channelId, message.id);
     },
     hasAccess: () => hasAiAccess(message),
+    isCurrent: unchanged,
     rejectPersonalData() {
       permitted = false;
       memoryDb.prepare(`DELETE FROM channel_messages
@@ -60,7 +61,7 @@ function observeChannelMessage(message, { discord, memoryDb, state }) {
     let content = typeof options === 'string' ? options : options?.content;
     if (!content && options?.files?.length) {
       const file = options.files[0]?.name ?? '';
-      const sticker = /^sticker-(focus|thumbup|salute|wink|disbelief|sulk|angry)-512\.png$/.exec(file);
+      const sticker = /^sticker-(focus|thumbup|salute|wink|disbelief|sulk|angry|war|bored)-512\.png$/.exec(file);
       if (sticker) content = `[Nyx wysłała sticker ${sticker[1]}.]`;
     }
     if (unchanged() && content) remember({ guildId, channelId, userId,

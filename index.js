@@ -46,6 +46,7 @@ discord.once(Events.ClientReady, (client) => {
     console.error('[Nyx] Nie udało się zarejestrować /nyx:', error);
   });
   if (FEATURES.NEWS_REPORT) startNewsReports({ discord: client, openai });
+  messageHandler.startSpontaneous();
 });
 
 const messageHandler = createMessageHandler({
@@ -59,7 +60,8 @@ discord.on(Events.MessageCreate, message => {
   void openai.withFuelScope({ category: 'message', groupId: message.id },
     () => messageHandler(message)).catch(console.error);
 });
-discord.on(Events.InteractionCreate, createCommandHandler({ memoryDb, state, openai }));
+discord.on(Events.InteractionCreate, createCommandHandler({ memoryDb, state, openai,
+  onContact: messageHandler.noteContact }));
 
 const userReactions = createUserReactionHandler({ discord, memoryDb });
 discord.on(Events.MessageReactionAdd, userReactions.onAdd);

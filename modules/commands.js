@@ -54,7 +54,7 @@ function formatFuel(fuel, recordingFailed = false) {
     `\nOstatnie potwierdzenie salda: ${date}.\nTo szacunek, nie saldo odczytane z OpenAI. Raporty i wyszukiwanie także zużywają środki; przyszłe koszty i aktywność w tle zmieniają zapas. Doładowania, wygaśnięcie kredytów i wydatki innych aplikacji wymagają korekty salda.`;
 }
 
-function createCommandHandler({ memoryDb, state, openai, infoChannel = '🌐-ai', roleId = process.env.AI_ACCESS_ROLE_ID }) {
+function createCommandHandler({ memoryDb, state, openai, onContact, infoChannel = '🌐-ai', roleId = process.env.AI_ACCESS_ROLE_ID }) {
   const confirmations = new Map();
   return async function onInteraction(interaction) {
     const command = interaction.isChatInputCommand?.() && interaction.commandName === 'nyx';
@@ -69,6 +69,7 @@ function createCommandHandler({ memoryDb, state, openai, infoChannel = '🌐-ai'
         return;
       }
       const now = Date.now();
+      onContact?.(interaction.guildId, interaction.channelId);
       for (const [id, value] of confirmations) if (value.expiresAt <= now) confirmations.delete(id);
       if (button) {
         const [, action, token] = interaction.customId.split(':');

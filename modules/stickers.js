@@ -3,7 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 
 const FILES = Object.freeze(Object.fromEntries(
-  ['focus', 'thumbup', 'salute', 'wink', 'disbelief', 'sulk', 'angry']
+  ['focus', 'thumbup', 'salute', 'wink', 'disbelief', 'sulk', 'angry', 'war', 'bored']
     .map(id => [id, path.join(__dirname, '..', 'images', `sticker-${id}-512.png`)])
 ));
 const DAY_MS = 24 * 60 * 60 * 1000;
