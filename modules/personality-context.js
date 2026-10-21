@@ -10,7 +10,27 @@ function normalize(text) {
     .trim();
 }
 
+// Wyraźne odniesienia do broni osobistej odróżniamy od uzbrojenia statków.
+const PERSONAL_WEAPON_RULE = /\b(?:fps|spluw[a-z]*|karabin[a-z]*|strzelb[a-z]*|shotgun[a-z]*|pistolet[a-z]*|rewolwer[a-z]*|r97|br[-\s]?2|ravager(?:[-\s]?212)?|coda|pulverizer[a-z]*|killshot[a-z]*|ripper[a-z]*|arlington[a-z]*|clem[a-z]*|polli dalal)\b/;
+
 const TOPIC_RULES = {
+  creators: [
+    /\b(?:streamer[a-z]*|stream(?:y|ow|a|ie|ach|ing)?|twitch[a-z]*|youtube[a-z]*|youtuber[a-z]*|tworc[a-z]*|kanal[a-z]*|content|kontent[a-z]*)\b/,
+    /\b(?:alkhadias[a-z]*|dj[_ ]alexn|foxfire(?:ttv)?|enakott[a-z]*|tenpoundfortytwo|boredgamer(?:uk)?|cpt[_ ]foxyloxy|foxyloxy)\b/,
+    /\b(?:kogo|co)\s+(?:ogladac|ogladasz)\b/,
+  ],
+  organizations: [
+    /\b(?:lcmc|lord(?:a|em|zie)? ciaho|ciaho|lynx(?:co|corp)?|blastoff|blast off(?: solutions)?|aipoch|airborne pork chops|skrzydlat[a-z]* schabow[a-z]*|pgg|polska gromada gwiezdna|pvof|polish voices of freedom|twh|the winged hussars|skrzydlat[a-z]* husari[a-z]*)\b/,
+    /\b(?:polsk[a-z]*|znajom[a-z]*|zaprzyjaznion[a-z]*|inn[a-z]*)\s+(?:organizacj[a-z]*|org(?:i|ow|ami)?)\b/,
+    /\b(?:sojusz[a-z]*|relacj[a-z]*)\b[\s\S]{0,60}\b(?:organizacj[a-z]*|org(?:i|ow|ami)?|umc)\b/,
+  ],
+  project: [
+    /\b(?:cig|cloud imperium|chris(?:a|ie)? roberts[a-z]*|jared[a-z]*|huckab[a-z]*|disco lando|crowdfunding[a-z]*|development[a-z]*)\b/,
+    /\b(?:finansowan[a-z]*|roadmap[a-z]*|pledge|game package|free fly)\b/,
+    /\b(?:projekt[a-z]*|rozwoj[a-z]*|obietnic[a-z]*|marketing[a-z]*)\b[\s\S]{0,80}\b(?:sc|star citizen|rsi)\b/,
+    /\b(?:sc|star citizen)\b[\s\S]{0,80}\b(?:projekt[a-z]*|rozwoj[a-z]*|obietnic[a-z]*|marketing[a-z]*|wart[a-z]*|ukoncz[a-z]*)\b/,
+    /\b(?:kupic|kupowac|dolaczyc|zaczac|polecasz|warto|myslisz|sadzisz|oceniasz|lubisz)\b[\s\S]{0,80}\b(?:sc|star citizen)\b/,
+  ],
   umc: [
     /\b(?:umc|unholy maiden|lastdunadan[a-z]*|dunadan[a-z]*|axinpel[a-z]*|axident[a-z]*|karen galaxy|alice void|blondyn[a-z]*)\b/,
     /\bnasz[a-z]*\s+(?:organizacj[a-z]*|zalog[a-z]*|zalodze|flot[a-z]*)\b/,
@@ -21,7 +41,13 @@ const TOPIC_RULES = {
     /\b(?:argo|aegis|anvil|aopoa|banu|crusader|drake|esperia|gatac|greycat|kruger|mirai|misc|origin|rsi|tumbril)\b/,
     /\b(?:consolidated outland|grey's market)\b/,
     /\b(?:auror[a-z]*|avenger[a-z]*|titan[a-z]*|cutter[a-z]*|cutlass[a-z]*|nomad[a-z]*|pisces|mustang[a-z]*|arrow[a-z]*|hornet[a-z]*|carrack[a-z]*|reclaimer[a-z]*|hammerhead[a-z]*|idris[a-z]*|polaris[a-z]*|perseus[a-z]*|perseusz[a-z]*|ironclad[a-z]*|kraken[a-z]*|mpuv[a-z]*|guardian[a-z]*|freelancer[a-z]*|reliant[a-z]*|odyssey|merchantman[a-z]*|railen[a-z]*|prowler[a-z]*|wolf[a-z]*)\b/,
-    /\b(?:build|loadout|naped[a-z]*|ladown[a-z]*|wiezycz[a-z]*|wieza|wieze)\b/,
+    /\b(?:starfarer[a-z]*|naped[a-z]*|ladown[a-z]*|wiezycz[a-z]*|wieza|wieze)\b/,
+  ],
+
+  weapons: [
+    PERSONAL_WEAPON_RULE,
+    /\b(?:bron(?:i|ia)?|behring[a-z]*|gemini|kastak[a-z]*|hedeb[a-z]*|bunk(?:ier|r)[a-z]*)\b/,
+    /\b(?:kastak arms|klaus\s*(?:&|i|and)\s*werner|grey['’]s market)\b/,
   ],
 
   humor: [
@@ -48,18 +74,36 @@ function selectPersonalityContext({
   content,
   contextModules,
   previousTopics = [],
+  purchasePending = false,
 }) {
   const text = normalize(content);
 
-  const detectedTopics = Object.entries(TOPIC_RULES)
+  let detectedTopics = Object.entries(TOPIC_RULES)
     .filter(([, rules]) => rules.some((rule) => rule.test(text)))
     .map(([topic]) => topic);
+
+  // „Broń do Arrowa” i „Starfarer Gemini” nie wymagają gustu broni ręcznej.
+  // Konkretne modele FPS w rozmowie o statkach mogą dołączyć oba moduły.
+  if (detectedTopics.includes('ships') && !PERSONAL_WEAPON_RULE.test(text)) {
+    detectedTopics = detectedTopics.filter((topic) => topic !== 'weapons');
+  }
+
+  if (/\b(?:build|loadout)[a-z]*\b/.test(text) &&
+      !detectedTopics.some((topic) => topic === 'ships' || topic === 'weapons')) {
+    const topic = previousTopics.includes('weapons') && !previousTopics.includes('ships')
+      ? 'weapons' : 'ships';
+    detectedTopics.push(topic);
+  }
 
   if (isMusicTopic(text)) detectedTopics.push('music');
 
   const musicFollowUp = previousTopics.includes('music') &&
     /^(?:(?:a\s+)?(?:daj|polec|pokaz|podrzuc)\s+(?:mi\s+)?cos\b|(?:a\s+)?cos\s+(?:innego|mocniejszego|spokojniejszego)\b)/.test(text);
-  const isFollowUp = musicFollowUp || FOLLOW_UP_RULES.some((rule) => rule.test(text));
+  const projectFollowUp = previousTopics.includes('project') &&
+    /^(?:(?:tak|nie)\b|[123][\s).:]|jestem (?:fanem|programista|developerem)|akceptuje\b|lubie science fiction\b|a (?:co|jak)\b)/.test(text);
+  const purchaseFollowUp = purchasePending && previousTopics.includes('project') &&
+    !/^(?:czesc|hej|witaj|dzien dobry|dobranoc)\b/.test(text);
+  const isFollowUp = purchaseFollowUp || projectFollowUp || musicFollowUp || FOLLOW_UP_RULES.some((rule) => rule.test(text));
 
   const requestedTopics = detectedTopics.length > 0
     ? detectedTopics

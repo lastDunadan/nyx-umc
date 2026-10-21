@@ -1,0 +1,171 @@
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+const { openMemory, getRelationship } = require('../modules/memory');
+const { COMMAND, createCommandHandler, registerNyxCommands } = require('../modules/commands');
+const { deleteUserExchanges, forgetConversation, channelVersion } = require('../modules/memory-control');
+const { saveChannelMessage, getChannelHistory } = require('../modules/channel-memory');
+function getRecentExchanges(db, userId) { return getChannelHistory(db, 'guild', 'channel').filter(row => row.authorId === userId); }
+const { initFuel } = require('../modules/fuel');
+
+function setup() {
+  const db = openMemory({ file: ':memory:' });
+  initFuel(db);
+  const state = { conversations: new Map() };
+  const handle = createCommandHandler({ memoryDb: db, state, roleId: 'access' });
+  const replies = [];
+  function interaction(subcommand, userId = 'a', allowed = true) {
+    return {
+      commandName: 'nyx', isChatInputCommand: () => true, isButton: () => false,
+      user: { id: userId, bot: false }, guildId: 'guild', channelId: 'channel',
+      guild: { channels: { cache: { find: () => ({ id: 'info' }) } } },
+      member: { roles: allowed ? ['access'] : [] },
+      options: { getSubcommand: () => subcommand, getInteger: () => 2 },
+      reply: async value => { replies.push(value); },
+      update: async value => { replies.push(value); },
+    };
+  }
+  function save(userId, content) {
+    saveChannelMessage(db, { guildId: 'guild', channelId: 'channel', messageId: `${userId}:${content}`, userId, displayName: 'Tester', content });
+  }
+  return { db, state, handle, replies, interaction, save };
+}
+
+test('Definicja /nyx: 6 podkomend, parametr całkowity 1–10', () => {
+  assert.equal(COMMAND.options.length, 6);
+  assert.deepEqual(COMMAND.options.find(x => x.name === 'clean').options[0], {
+    type: 4, name: 'liczba', description: 'Liczba wymian (wiadomość i odpowiedź)',
+    required: true, min_value: 1, max_value: 10,
+  });
+});
+
+test('Rejestracja tworzy tylko /nyx i nie używa set kasującego inne komendy', async () => {
+  let created;
+  const guild = { name: 'UMC', commands: { create: async value => { created = value; } } };
+  await registerNyxCommands({ guilds: { cache: { size: 1, first: () => guild } } });
+  assert.equal(created.name, 'nyx');
+  await assert.rejects(registerNyxCommands({ guilds: { cache: { size: 2 } } }));
+});
+
+test('Clean usuwa najnowsze wymiany tylko autora, zachowuje opinię i punkty', async () => {
+  const x = setup();
+  try {
+    for (const text of ['pierwsza', 'druga', 'trzecia']) x.save('a', text);
+    x.save('b', 'inna osoba');
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'a', messageId: 'other', displayName: 'Tester', content: 'zachowaj drugi kanał' });
+    x.db.prepare("UPDATE users SET sympathy=16, opinion='Miła rozmowa.' WHERE user_id='a'").run();
+    x.state.conversations.set('guild:channel:a', {});
+    x.state.conversations.set('guild:other:a', {});
+    x.state.conversations.set('guild:channel:b', {});
+    await x.handle(x.interaction('clean'));
+    assert.deepEqual(getRecentExchanges(x.db, 'a').map(r => r.content), ['pierwsza']);
+    assert.equal(getRecentExchanges(x.db, 'b').length, 1);
+    assert.equal(getChannelHistory(x.db, 'guild', 'other').length, 1);
+    assert.equal(getRelationship(x.db, 'a').sympathy, 16);
+    assert.equal(getRelationship(x.db, 'a').opinion, 'Miła rozmowa.');
+    assert.equal(x.state.conversations.size, 1);
+    assert.ok(x.state.conversations.has('guild:other:a'));
+    assert.ok(!x.state.conversations.has('guild:channel:b'));
+    assert.equal(channelVersion(x.state, 'guild', 'channel'), 1);
+    assert.equal(x.replies[0].flags, 64);
+    assert.match(x.replies[0].content, /na tym kanale/);
+    assert.throws(() => deleteUserExchanges(x.db, 'a', 11));
+    assert.throws(() => deleteUserExchanges(x.db, 'a', 0));
+  } finally { x.db.close(); }
+});
+
+test('Purge wymaga potwierdzenia autora; nie daje się powtórzyć ani wykonać za inną osobę', async () => {
+  const x = setup();
+  try {
+    x.save('a', 'testowa wymiana');
+    await x.handle(x.interaction('purge'));
+    assert.equal(getRecentExchanges(x.db, 'a').length, 1);
+    const id = x.replies[0].components[0].components[0].custom_id;
+    function button(user) {
+      const i = x.interaction('purge', user);
+      return { ...i, isChatInputCommand: () => false, isButton: () => true, customId: id };
+    }
+    await x.handle(button('b'));
+    assert.equal(getRecentExchanges(x.db, 'a').length, 1);
+    await x.handle(button('a'));
+    assert.equal(getRecentExchanges(x.db, 'a').length, 0);
+    const version = channelVersion(x.state, 'guild', 'channel');
+    await x.handle(button('a'));
+    assert.equal(channelVersion(x.state, 'guild', 'channel'), version);
+  } finally { x.db.close(); }
+});
+
+test('Potwierdzenie purge wygasa i można je anulować', async () => {
+  const x = setup();
+  const original = Date.now;
+  try {
+    x.save('a', 'testowa wymiana');
+    const start = Date.now();
+    Date.now = () => start;
+    await x.handle(x.interaction('purge'));
+    let id = x.replies[0].components[0].components[0].custom_id;
+    const click = customId => ({ ...x.interaction('purge'), isChatInputCommand: () => false,
+      isButton: () => true, customId });
+    Date.now = () => start + 61000;
+    await x.handle(click(id));
+    assert.equal(getRecentExchanges(x.db, 'a').length, 1);
+    await x.handle(x.interaction('purge'));
+    id = x.replies.at(-1).components[0].components[1].custom_id;
+    await x.handle(click(id));
+    assert.equal(getRecentExchanges(x.db, 'a').length, 1);
+    assert.match(x.replies.at(-1).content, /anulowane/);
+  } finally { Date.now = original; x.db.close(); }
+});
+
+test('Help, rep, privacy i fuel są prywatne i nie wywołują modelu', async () => {
+  const x = setup();
+  try {
+    for (const name of ['help', 'rep', 'privacy', 'fuel']) await x.handle(x.interaction(name));
+    assert(x.replies.every(r => r.flags === 64 && r.allowedMentions.parse.length === 0));
+    assert.match(x.replies[0].content, /<#info>/);
+    assert.match(x.replies[1].content, /3 \/ 20/);
+    const before = x.replies.length;
+    await x.handle({ ...x.interaction('help'), commandName: 'another' });
+    assert.equal(x.replies.length, before);
+    await x.handle(x.interaction('clean', 'a', false));
+    assert.match(x.replies.at(-1).content, /AI Access/);
+  } finally { x.db.close(); }
+});
+
+test('Wersja pamięci blokuje późny zapis po purge, również bez wcześniejszych rozmów', () => {
+  const state = { conversations: new Map() };
+  const { memoryVersion } = require('../modules/memory-control');
+  const captured = memoryVersion(state, 'a');
+  forgetConversation(state, 'a');
+  assert.notEqual(captured, memoryVersion(state, 'a'));
+});
+
+
+test('Potwierdzenie purge jest przypisane do kanału, ale usuwa wymiany autora ze wszystkich kanałów', async () => {
+  const x = setup();
+  try {
+    x.save('a', 'ten kanał');
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'a', messageId: 'other', displayName: 'Tester', content: 'inny kanał' });
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'a', authorId: 'nyx', kind: 'nyx', exchangeId: 'other', messageId: 'answer', displayName: 'Nyx', content: 'odpowiedź' });
+    saveChannelMessage(x.db, { guildId: 'guild', channelId: 'other', userId: 'b', messageId: 'b-other', displayName: 'Tester B', content: 'inna osoba' });
+    saveChannelMessage(x.db, { guildId: 'second-guild', channelId: 'c', userId: 'a', messageId: 'second', displayName: 'Tester', content: 'inny serwer' });
+    x.db.prepare("INSERT INTO message_bank (user_id, created_at, content, response) VALUES ('a', ?, 'stare', 'OK')").run(Date.now());
+    x.db.prepare("UPDATE users SET sympathy=16, opinion='Zachowaj opinię' WHERE user_id='a'").run();
+    channelVersion(x.state, 'guild', 'other');
+    channelVersion(x.state, 'second-guild', 'c');
+    await x.handle(x.interaction('purge'));
+    const customId = x.replies.at(-1).components[0].components[0].custom_id;
+    const button = { ...x.interaction('purge'), isChatInputCommand: () => false, isButton: () => true, customId };
+    await x.handle({ ...button, channelId: 'other' });
+    assert.equal(getRecentExchanges(x.db, 'a').length, 1);
+    await x.handle(button);
+    assert.equal(getRecentExchanges(x.db, 'a').length, 0);
+    assert.deepEqual(getChannelHistory(x.db, 'guild', 'other').map(r => r.ownerId), ['b']);
+    assert.equal(getChannelHistory(x.db, 'second-guild', 'c').length, 0);
+    assert.equal(x.db.prepare('SELECT COUNT(*) AS n FROM message_bank').get().n, 0);
+    assert.equal(getRelationship(x.db, 'a').sympathy, 16);
+    assert.equal(getRelationship(x.db, 'a').opinion, 'Zachowaj opinię');
+    assert.equal(channelVersion(x.state, 'guild', 'other'), 1);
+    assert.equal(channelVersion(x.state, 'second-guild', 'c'), 1);
+    assert.match(x.replies.at(-1).content, /4 wymian ze wszystkich kanałów/);
+  } finally { x.db.close(); }
+});

@@ -1,19 +1,17 @@
 # Nyx UMC
 
-Prywatny bot Discord organizacji Unholy Maiden Crew (UMC) ze świata *Star Citizen*. Nyx rozmawia z załogą, odpowiada na pytania z wybranego zakresu, reaguje na wiadomości i reakcje, prowadzi prostą relację z użytkownikami oraz publikuje poranny przegląd dwóch kanałów informacyjnych. Jej osobowość i zasady rozmowy są opisane w plikach `personality/`.
+Prywatna AI załogi Unholy Maiden Crew na Discordzie. Rozmawia o Star Citizen, wyszukuje informacje, pamięta rozmowy na wybranych kanałach i publikuje poranny przegląd aktualizacji oraz przecieków. Osobowość Nyx znajduje się w `personality/`.
 
-## Stack i wymagania
+## Technologie
 
-- Node.js **24** (`.nvmrc`; projekt korzysta z wbudowanego `node:sqlite`), npm i CommonJS.
-- `discord.js` 14, `openai` 7 oraz `dotenv` — dokładne wersje instalowane z `package-lock.json`.
-- Konto i klucz OpenAI API z dostępnym modelem używanym w kodzie (`gpt-6-luna`) oraz bot utworzony w Discord Developer Portal.
-- Bot musi działać stale, jeśli ma wysłać raport o zaplanowanej godzinie. Obecny harmonogram nie nadrabia raportu po uruchomieniu po tej godzinie.
+Node.js **24** (wersja w `.nvmrc`), CommonJS, `discord.js` 14, OpenAI Responses API, `dotenv` i wbudowane SQLite (`node:sqlite`). Zależności instaluje `npm ci` z `package-lock.json`.
 
-## Uruchomienie
+## Instalacja
 
-1. W Discord Developer Portal włącz dla bota **Message Content Intent**. Dodaj go na serwer z uprawnieniami do oglądania kanałów, historii wiadomości, wysyłania wiadomości i dodawania reakcji. Do raportu potrzebny jest odczyt kanałów źródłowych i zapis na kanale docelowym. W kodzie aktywne są również `GuildMessageReactions` oraz częściowe wiadomości i reakcje.
-2. Utwórz na serwerze rolę dającą zgodę na interakcje z AI. Włącz tryb deweloperski Discorda, skopiuj **ID roli** i przydziel ją osobom, które mają korzystać z Nyx. Nazwa roli nie zastępuje ID.
-3. Utwórz plik `.env` w katalogu głównym:
+1. Utwórz bota w Discord Developer Portal i włącz **Message Content Intent**.
+2. Dodaj bota na serwer z zakresami `bot` i `applications.commands`. Na kanałach rozmów przyznaj mu wyświetlanie kanału, czytanie historii, wysyłanie wiadomości, dodawanie reakcji oraz **Attach Files**. Na kanałach źródłowych raportu wystarczy odczyt; na docelowym potrzebny jest zapis.
+3. Przydziel użytkownikom rolę **AI Access** i zezwól jej na **Używanie poleceń aplikacji**. Skopiuj ID roli w trybie deweloperskim Discorda.
+4. W głównym katalogu utwórz `.env`:
 
    ```dotenv
    DISCORD_TOKEN=token_bota_discord
@@ -21,7 +19,7 @@ Prywatny bot Discord organizacji Unholy Maiden Crew (UMC) ze świata *Star Citiz
    AI_ACCESS_ROLE_ID=id_roli_discord
    ```
 
-4. Zainstaluj zależności i uruchom aplikację:
+5. Uruchom:
 
    ```bash
    nvm use
@@ -29,76 +27,45 @@ Prywatny bot Discord organizacji Unholy Maiden Crew (UMC) ze świata *Star Citiz
    npm start
    ```
 
-   Jeśli nie używasz `nvm`, zainstaluj Node.js 24 przed wykonaniem `npm ci`. `DISCORD_TOKEN` i `OPENAI_API_KEY` są sprawdzane przy starcie; bez poprawnego `AI_ACCESS_ROLE_ID` bot nie będzie odpowiadał członkom serwera.
+Bez `nvm` zainstaluj Node.js 24. Konto OpenAI musi mieć środki i dostęp do modelu ustawionego w kodzie. `.env`, `data/` i `node_modules/` są ignorowane przez Git.
 
-Plik `.env`, katalog `data/` i `node_modules/` są ignorowane przez Git. Nie dodawaj tokenów ani bazy SQLite do repozytorium. `npm test` uruchamia testy przez `node --test`, bez połączenia z Discordem, OpenAI ani rzeczywistą bazą.
+## Konfiguracja i użycie
 
-## Jak działa
+W `modules/config.js` ustaw kanały (najlepiej przez ID), przełączniki `FEATURES` i harmonogram `NEWS_REPORT`. Domyślnie rozmowy działają na **💬-lobby, 🌍-lobby-int, 🍻-kantyna i 🧨-offtop**; raport o 09:00 czasu polskiego czyta **💾-aktualizacje** i **💧-przecieki**. Przy kilku serwerach ustaw `NEWS_REPORT.GUILD_ID`. Bot musi działać stale, aby wykonywać harmonogramy.
 
-- Bot odpowiada na oznaczenie `@Nyx`, odpowiedź na jego wiadomość albo wzmiankę „Nyx” w treści (jeśli włączono `NAME_TRIGGER`). Może też spontanicznie ocenić dwuznaczność lub przekleństwo. Te zachowania oraz raport można włączać osobno w `FEATURES` w `modules/config.js`.
-- **Bramka roli działa przed obsługą wiadomości i wywołaniami OpenAI.** Wiadomości osób bez roli wskazanej przez `AI_ACCESS_ROLE_ID` są ignorowane. Ich nowe interakcje nie trafiają do bazy. Odebranie roli nie kasuje automatycznie wcześniejszych danych.
-- Reakcje pod wiadomościami Nyx mogą zmieniać `sympathy`. Przyznanie punktów jest jednorazowe na parę użytkownik–wiadomość Nyx; zdjęcie pierwotnie punktowanej reakcji może odwrócić zmianę zgodnie z regułami przeprosin i blokady.
-- Odpowiedzi korzystają z OpenAI Responses API. Rozmowy mogą używać `web_search`; wiadomości z kanałów raportu są przekazywane do OpenAI w celu streszczenia. Wywołania API mogą generować koszty i podlegają limitom konta.
+Nyx reaguje na oznaczenie, odpowiedź na jej wiadomość oraz swoje imię. Rozmowy i żarty TWSS dotyczą wyłącznie osób z AI Access. Stickery są załącznikami PNG: wspólny limit **2 dziennie** dla całej aplikacji i **24h przerwy na rodzaj**; restart nie zeruje limitu dziennego.
 
-## Struktura projektu
+Research najpierw szuka świeżych dowodów dla zmiennych informacji; starsze dane dopuszcza jako historyczne po nieudanej próbie. Daty, patch i linki są kontrolowane, a Flight Ready, LIVE i zakup za aUEC wymagają osobnych dowodów. Limit dwóch badań obejmuje także próbę awaryjną; kontrola metadanych nie gwarantuje poprawnej interpretacji treści źródła przez model.
 
-| Ścieżka | Rola |
+Spontaniczne `war` losuje wtrącenie przy umawianiu wspólnej akcji w grze. `bored` losuje zagajenie z tekstem na lobby lub kantynie po **6h bez zaczepienia lub wypowiedzi Nyx**, jeśli była tam aktywność AI Access w ostatnich 24h. Zwykła rozmowa załogi nie zeruje tej ciszy. Progi, szanse i kanały zmienisz w `SPONTANEOUS_STICKERS`; obie scenki działają bez wywołań OpenAI.
+
+Wybierz `/nyx` z menu komend Discorda. Odpowiedzi widzi tylko osoba wywołująca:
+
+| Komenda | Działanie |
 | --- | --- |
-| `index.js` | Ładuje `.env`, otwiera SQLite, uruchamia klienta Discord, obsługę wiadomości i reakcji oraz opcjonalny raport; okresowo usuwa wygasłe wymiany. |
-| `modules/config.js` | Przełączniki `FEATURES`, progi czasu, słowa kandydujące do spontanicznych reakcji, listy emoji i ustawienia `NEWS_REPORT`. |
-| `modules/access.js`, `modules/messages.js` | Kontrola roli i kierowanie wiadomości do właściwej funkcji. |
-| `modules/conversation.js`, `modules/sympathy-tone.js` | Odpowiedzi modelu, kontekst pamięci, ton relacji, punktacja i przeprosiny. |
-| `modules/humor.js`, `modules/scolding.js` | Spontaniczny żart i żartobliwe strofowanie. |
-| `modules/user-reactions.js`, `modules/static-replies.js` | Ocena reakcji użytkowników oraz gotowe komunikaty, pożegnania i emoji Nyx. |
-| `modules/memory.js`, `modules/privacy.js`, `modules/state.js` | SQLite, filtr zapisu wymian i pamięć działającego procesu. |
-| `modules/news.js`, `modules/errors-handler.js` | Poranny raport i obsługa błędów rozmowy. |
-| `modules/personality.js`, `modules/personality-context.js`, `personality/*.txt` | Stały prompt i tożsamość oraz dobieranie modułów lore, statków, humoru i muzyki do tematu rozmowy. |
-| `modules/music.js`, `personality/nyx-music.txt` | Katalog utworów, wybór kandydatów, bezpośrednie linki YouTube i opis gustu Nyx. |
-| `data/` | Tworzone lokalnie pliki bazy i stanu raportu; katalog ignorowany przez Git. |
+| `help` | Pomoc. |
+| `rep` | Reputacja i opinia Nyx. |
+| `clean liczba` | Usuwa 1–10 Twoich wymian na bieżącym kanale. |
+| `purge` | Po potwierdzeniu usuwa Twoje wymiany ze wszystkich kanałów. |
+| `privacy` | Informacje o zapisywanych danych. |
+| `fuel` | Szacowane saldo i zapas odpowiedzi. |
 
-## Muzyka
+Zmiana konfiguracji lub osobowości wymaga restartu. Model i stawki kosztów są ustawione w modułach korzystających z OpenAI oraz `modules/fuel.js`.
 
-Nyx dzieli się linkami do utworów; nie odtwarza dźwięku na kanałach głosowych. Przykłady: „Nyx, jaka jest Twoja ulubiona piosenka?”, „Poleć coś buntowniczego do walki!”, „Coś z dark country?” lub, po poleceniu utworu, „Daj coś innego”. „The Lost Boy” Grega Holdena jest jej ulubionym hymnem.
+## Dane i koszty
 
-Gust opisuje `personality/nyx-music.txt`. Jest ładowany do instrukcji modelu tylko przy temacie muzyki. `modules/music.js` zawiera 19 utworów i wybiera najwyżej pięciu kandydatów według tytułu, wykonawcy, tagów nastroju oraz ostatnich propozycji. Model wybiera `musicTrackId`; aplikacja dopisuje link z katalogu. Nie potrzeba nowych zależności, kluczy `.env` ani migracji bazy.
+SQLite powstaje automatycznie w `data/nyx-memory.sqlite`; stan raportu jest w `data/news-report.json`. Przed aktualizacją zrób kopię `data/`. Historia każdego kanału obejmuje do **20 wiadomości / 12 000 znaków / 12h**, tylko od osób z AI Access oraz powiązane odpowiedzi Nyx. Filtr danych osobowych jest heurystyczny; treści rozmów i raportów są przekazywane OpenAI.
 
-Aby dodać utwór, dopisz do `MUSIC_TRACKS` obiekt z polami `id`, `title`, `artist`, `youtubeUrl`, `tags` (tablica) i `whyNyxLikes`. Nadaj unikalne, stałe ID i sprawdź link YouTube. Opcjonalna tablica `aliases` pozwala rozpoznawać inne zapisy tytułu lub wykonawcy. Istniejące tagi oraz reguły dopasowania są w `TAG_RULES`; dla nowego nastroju możesz dodać własną regułę. Po zmianie plików uruchom bota ponownie i wykonaj `npm test`.
+Dane techniczne wygasają po **14 dniach**, z zachowaniem trzech ostatnich ocen wiadomości użytkownika i sum kosztów potrzebnych do salda. Reputacja i opinia pozostają. `clean` i `purge` nie kasują wiadomości na Discordzie ani danych po stronie OpenAI.
 
-Bot pamięta w RAM pięć ostatnio udostępnionych ID w danej rozmowie użytkownika na kanale, przez maksymalnie 12 godzin bezczynności. Unika powtórek, o ile są inne pasujące utwory; bezpośrednia prośba o konkretny tytuł lub ulubiony hymn pozwala na powtórzenie. Restart czyści tę listę. Udostępniony link jest częścią odpowiedzi zapisywanej w zwykłej pamięci wymian, z dotychczasowym filtrem prywatności i limitem czasu. Sympatia nadal decyduje o tonie i odmowie pomocy.
+Aby ustawić pełne bieżące saldo USD z panelu OpenAI, zatrzymaj bota i wykonaj:
 
-## Pamięć i baza danych
-
-`modules/memory.js` tworzy `data/nyx-memory.sqlite` przy starcie. Główne tabele to `users` (ID Discord, nick, opinia, poziom `sympathy`, flaga `special` i stan relacji), `message_bank` (ostatnie wymiany), `sympathy_events` (zdarzenia punktowe) oraz `reaction_awards` (emoji i informacja o cofnięciu punktów). Flaga `special` jest ustawiana ręcznie w bazie; bot sam jej nie przyznaje.
-
-Na użytkownika przechowywanych jest najwyżej **10 wymian**. Wymiany starsze niż **12 godzin** są usuwane przy starcie, przy odczycie pamięci i cyklicznie co 5 minut. Zapis treści może zostać pominięty przez filtr danych osobowych (`modules/privacy.js`) i ocenę modelu. Filtr ogranicza ryzyko zapisu takich danych, ale nie gwarantuje ich wykrycia w każdej postaci. Rekordy `users` i historia zdarzeń punktowych **nie mają automatycznego terminu usunięcia**. Nick Discorda jest zapisywany w `users`; należy to opisać w regulaminie i zapewnić drogę do żądania usunięcia danych.
-
-Przed ręczną edycją SQLite zatrzymaj bota i zachowaj kopię bazy. W DB Browser for SQLite można obejrzeć dane oraz usunąć dane konkretnego użytkownika po jego ID Discord; klucz obcy usuwa wtedy również powiązane wymiany i zdarzenia:
-
-```sql
-DELETE FROM users WHERE user_id = 'DISCORD_USER_ID';
+```bash
+node scripts/set-fuel.js 10.50
 ```
 
-## Poranny raport
+Potem uruchom Nyx ponownie. `fuel` jest szacunkiem; wydatki innych aplikacji, doładowania i zmiany cennika wymagają korekty salda.
 
-Konfiguracja jest w `modules/config.js` w obiekcie `NEWS_REPORT`:
+## Praca nad projektem
 
-- `TIME_ZONE`, `HOUR`, `MINUTE` — strefa i godzina; domyślnie 9:00 w `Europe/Warsaw`.
-- `LOOKBACK_HOURS` — okno wiadomości, domyślnie 24 godziny.
-- `GUILD_ID` — ID serwera; pusty tekst działa, jeśli bot jest tylko na jednym serwerze.
-- `SOURCE_CHANNELS.updates`, `SOURCE_CHANNELS.leaks` i `TARGET_CHANNEL` — nazwy albo ID kanałów. Docelowy kanał w bieżącej konfiguracji to testowy `🧨-offtop`.
-- `TEST_ON_START` — wymusza publikację po starcie. **Po teście ustaw `false`**: wymuszony raport może powtórzyć się po kolejnym uruchomieniu.
-- `MAX_MESSAGES_PER_CHANNEL`, `MAX_INPUT_CHARS` — limity odczytu i wejścia modelu; po ich przekroczeniu raport nie jest wysyłany.
-
-Raport oddziela aktualności od niepotwierdzonych przecieków, dołącza odnośniki do źródłowych wiadomości i redukuje liczbę punktów, aby zmieścić się w pojedynczej wiadomości Discorda. `data/news-report.json` przechowuje klucz ostatniej wysyłki dla danego serwera, kanału i dnia, aby zapobiec zwykłym duplikatom. Kanały źródłowe mogą zawierać wpisy automatycznych źródeł; nie wymagają one roli `AI_ACCESS_ROLE_ID`. Raport publikuje aplikacja niezależnie od tego, kto ma rolę do rozmowy.
-
-## Użycie poza UMC
-
-Projekt jest obecnie napisany dla **jednego serwera** i ma zaszytą postać Nyx oraz lore UMC. Aby dostosować go do innej społeczności:
-
-1. Przeredaguj `personality/nyx-prompt.txt`, `nyx-org.txt`, `nyx-ships.txt` i `nyx-humor.txt`. Zmień nazwę społeczności, zakres rozmów, historię postaci, żarty, preferencje i źródła wiedzy. Jeśli zmieniasz nazwy plików, popraw je również w `modules/personality.js`.
-2. Przejrzyj teksty zależne od UMC i LastDunadan w `modules/static-replies.js`, instrukcje w `modules/conversation.js` i `modules/scolding.js` oraz nagłówek i instrukcję raportu w `modules/news.js`. Samo podmienienie plików `.txt` nie wystarczy.
-3. Ustaw własne kanały, strefę czasową i godzinę w `NEWS_REPORT` oraz listy słów i emoji w `modules/config.js`. Jeśli nie potrzebujesz raportu lub spontanicznych reakcji, wyłącz odpowiednie pozycje `FEATURES`.
-4. Utwórz własną rolę dostępu na nowym serwerze i wpisz jej ID w `AI_ACCESS_ROLE_ID`. Dostosuj regulamin i zasady zapisu danych do swojej społeczności.
-5. Przy wdrożeniu na więcej niż jednym serwerze przejrzyj klucze pamięci i logikę dostępu: trwałe relacje są indeksowane według ID użytkownika, a domyślna konfiguracja zakłada jeden serwer. Samo wpisanie `GUILD_ID` w raporcie nie izoluje relacji między serwerami.
-
-Identyfikator modelu (`gpt-6-luna`) jest zapisany osobno w modułach używających OpenAI. Jeśli chcesz zmienić model, sprawdź `conversation.js`, `humor.js`, `scolding.js` i `news.js` oraz przetestuj format odpowiedzi każdego z nich.
+`index.js` uruchamia aplikację, `modules/` zawiera logikę, `personality/` teksty osobowości, `images/` grafiki, a `test/` testy. Uruchom `npm test` przed wysłaniem zmian. Testy działają bez Discorda i płatnych wywołań OpenAI, na izolowanych bazach SQLite.

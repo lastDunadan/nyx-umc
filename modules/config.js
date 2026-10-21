@@ -1,14 +1,34 @@
+// Można zastąpić nazwy kanałów ich ID; wątki nie są automatycznie dozwolone.
+const CHAT_MEMORY = {
+  CHANNELS: ['💬-lobby', '🌍-lobby-int', '🍻-kantyna', '🧨-offtop'],
+  MAX_MESSAGES: 20,
+  MAX_MESSAGE_CHARS: 3000,
+  MAX_CONTEXT_CHARS: 12000,
+};
+
 const TIMER_VALUE = {
   TEST: 20 * 1000,
   LIVE: 5 * 60 * 1000,
 };
 const SPONTANEOUS_COOLDOWN_MS = TIMER_VALUE.TEST;
 
+const SPONTANEOUS_STICKERS = {
+  WAR_CHANCE: 0.15,
+  WAR_CONTEXT_MS: 10 * 60 * 1000,
+  BORED_CHANNELS: ['💬-lobby', '🍻-kantyna'],
+  BORED_IDLE_MS: 6 * 60 * 60 * 1000,
+  BORED_RECENT_ACTIVITY_MS: 24 * 60 * 60 * 1000,
+  BORED_CHECK_MS: 15 * 60 * 1000,
+  BORED_CHANCE: 0.10,
+};
+
 const FEATURES = {
   SWEAR_CHECK: true,                          // spontaniczne strofowanie za przekleństwa
   TWSS_JOKE: true,                            // spontaniczny żart „That's what she said!”
   NAME_TRIGGER: true,                         // reakcja na „Nyx” napisane bez @
   NEWS_REPORT: true,                          // raportowanie zmian z kanałów '💾-aktualizacje' oraz '💧-przecieki'
+  WAR_STICKER: true,
+  BORED_STICKER: true,
 };
 
 const NEWS_REPORT = {
@@ -44,6 +64,8 @@ const NEGATIVE_USER_REACTIONS = new Set([
 ]);
 
 module.exports = {
+  SPONTANEOUS_STICKERS,
+  CHAT_MEMORY,
   FEATURES,
   NEWS_REPORT,
   SPONTANEOUS_COOLDOWN_MS,
